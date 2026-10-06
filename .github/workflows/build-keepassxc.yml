@@ -223,26 +223,35 @@ jobs:
             echo "=== compiled-in test configuration ==="
             grep -E 'KEEPASSXC_TEST_PYTHON|KEEPASSXC_TEST_WEBDAV_SERVER' config-keepassx-tests.h
             echo
-            echo "=== can MSYS2 python actually run? ==="
-            PY=$(sed -n 's/^#define KEEPASSXC_TEST_PYTHON "\(.*\)"/\1/p' config-keepassx-tests.h)
-            "$PY" --version; echo "(python --version exit: $?)"
-            "$PY" -c "print('python executed a script')"; echo "(python -c exit: $?)"
+            echo "=== binary sizes: ours vs a known-good test ==="
+            ls -l testwebdavclient.exe testdatabase.exe testmerge.exe 2>&1
             echo
-            echo "=== can the server start standalone? ==="
+            echo "=== linked libraries (imports) ==="
+            objdump -p testwebdavclient.exe 2>/dev/null | grep 'DLL Name' || echo "objdump unavailable"
+            echo
+            echo "=== python and server sanity ==="
+            PY=$(sed -n 's/^#define KEEPASSXC_TEST_PYTHON "\(.*\)"/\1/p' config-keepassx-tests.h)
+            "$PY" --version
             "$PY" "$(sed -n 's/^#define KEEPASSXC_TEST_WEBDAV_SERVER "\(.*\)"/\1/p' config-keepassx-tests.h)" "$TEMP/webdav-manual" 0 &
             SRVPID=$!
             sleep 2
             kill $SRVPID 2>/dev/null
-            echo "(server started and was killed)"
+            echo "(standalone server start attempted)"
             echo
-            echo "=== direct run, no redirection games ==="
+            echo "=== direct run: stdout+stderr captured separately ==="
           } >> "$out" 2>&1
 
-          QT_QPA_PLATFORM=offscreen ./testwebdavclient.exe -v2 > "$out.run" 2>&1
+          ./testwebdavclient.exe -v2 > "$out.stdout" 2> "$out.stderr"
           status=$?
-          echo "test exit status: $status, bytes: $(wc -c < "$out.run")" >> "$out"
-          cat "$out.run" >> "$out" 2>&1
-          rm -f "$out.run"
+          {
+            echo "exit status: $status"
+            echo "stdout bytes: $(wc -c < "$out.stdout")"
+            echo "stderr bytes: $(wc -c < "$out.stderr")"
+            echo "--- stdout ---"
+            cat "$out.stdout"
+            echo "--- stderr ---"
+            cat "$out.stderr"
+          } >> "$out" 2>&1
 
           echo "=== WebDAV test diagnostics ==="
           head -c 5000 "$out"
