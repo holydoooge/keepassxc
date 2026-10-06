@@ -102,6 +102,9 @@ static const QHash<Config::ConfigKey, ConfigDirective> configStrings = {
     {Config::LastActiveDatabase, {QS("LastActiveDatabase"), Local, {}}},
     {Config::LastOpenedDatabases, {QS("LastOpenedDatabases"), Local, {}}},
     {Config::LastDir, {QS("LastDir"), Local, QDir::homePath()}},
+    // Local, not Roaming: WebDAV passwords must not travel with a shared config,
+    // and the database they belong to is not shared either.
+    {Config::RemoteWebDavCredentials, {QS("RemoteWebDavCredentials"), Local, {}}},
 
     // GUI
     {Config::GUI_Language, {QS("GUI/Language"), Roaming, QS("system")}},

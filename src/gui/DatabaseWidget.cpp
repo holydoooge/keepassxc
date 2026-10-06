@@ -1164,11 +1164,14 @@ void DatabaseWidget::syncWithRemote(const RemoteParams* params)
     result.success = false;
     result.errorMessage = tr("Remote Sync did not contain any download or upload commands.");
 
+    // WebDAV credentials are kept out of the database, so fetch them locally.
+    const auto webDavPassword = m_remoteSettings->webDavPassword(params);
+
     // Download the database
-    if (!params->downloadCommand.isEmpty()) {
+    if (RemoteHandler::usesWebDav(params) || !params->downloadCommand.isEmpty()) {
         emit updateSyncProgress(25, tr("Downloading..."));
         // Start a download first then merge and upload in the callback
-        result = remoteHandler->download(params);
+        result = remoteHandler->download(params, webDavPassword);
         if (result.success) {
             QString error;
             QSharedPointer<Database> remoteDb = QSharedPointer<Database>::create();
@@ -1209,9 +1212,17 @@ void DatabaseWidget::syncDatabaseWithLockedDatabase(const QString& filePath, con
 void DatabaseWidget::uploadAndFinishSync(const RemoteParams* params, RemoteHandler::RemoteResult result)
 {
     QScopedPointer<RemoteHandler> remoteHandler(new RemoteHandler(this));
-    if (result.success && !params->uploadCommand.isEmpty()) {
+    const auto webDavPassword = m_remoteSettings->webDavPassword(params);
+    if (result.success && (RemoteHandler::usesWebDav(params) || !params->uploadCommand.isEmpty())) {
         emit updateSyncProgress(75, tr("Uploading..."));
-        result = remoteHandler->upload(result.filePath, params);
+        result = remoteHandler->upload(result.filePath, params, webDavPassword);
+    }
+
+    // A refused upload means another device wrote the remote file while we were
+    // merging. The merge is what protects the data, so running the sync again
+    // picks up that revision; the caller decides whether to retry automatically.
+    if (result.conflict) {
+        emit databaseSyncConflict(params->name, result.errorMessage);
     }
 
     finishSync(params, result);

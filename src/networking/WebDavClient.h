@@ -23,6 +23,7 @@
 #ifdef KPXC_FEATURE_NETWORK
 
 #include <QByteArray>
+#include <QCoreApplication>
 #include <QNetworkRequest>
 #include <QString>
 
@@ -69,6 +70,10 @@ struct WebDavConfig
  */
 class WebDavClient
 {
+    // WebDavClient is intentionally not a QObject: it runs synchronously on the
+    // calling thread. This macro provides the tr() used for user-facing errors.
+    Q_DECLARE_TR_FUNCTIONS(WebDavClient)
+
 public:
     enum class Status
     {

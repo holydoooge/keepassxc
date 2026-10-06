@@ -79,18 +79,18 @@ namespace
         case 302:
         case 307:
         case 308:
-            return QObject::tr("The server redirected the request. Check that the URL points directly at the "
-                               "database file.");
+            return WebDavClient::tr("The server redirected the request. Check that the URL points directly at the "
+                                    "database file.");
         case 405:
-            return QObject::tr("The server does not allow this operation on the resource.");
+            return WebDavClient::tr("The server does not allow this operation on the resource.");
         case 409:
-            return QObject::tr("The parent collection does not exist on the server.");
+            return WebDavClient::tr("The parent collection does not exist on the server.");
         case 423:
-            return QObject::tr("The resource is locked on the server.");
+            return WebDavClient::tr("The resource is locked on the server.");
         case 507:
-            return QObject::tr("The server is out of storage space.");
+            return WebDavClient::tr("The server is out of storage space.");
         default:
-            return QObject::tr("The server returned HTTP status %1.").arg(status);
+            return WebDavClient::tr("The server returned HTTP status %1.").arg(status);
         }
     }
 } // namespace

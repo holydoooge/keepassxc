@@ -87,12 +87,16 @@ QString RemoteSettings::toConfig() const
     for (const auto params : m_remoteParams.values()) {
         QJsonObject object;
         object["name"] = params->name;
+        object["transport"] = params->transport == RemoteParams::Transport::WebDav ? "webdav" : "command";
         object["downloadCommand"] = params->downloadCommand;
         object["downloadCommandInput"] = params->downloadInput;
         object["downloadTimeoutMsec"] = params->downloadTimeoutMsec;
         object["uploadCommand"] = params->uploadCommand;
         object["uploadCommandInput"] = params->uploadInput;
         object["uploadTimeoutMsec"] = params->uploadTimeoutMsec;
+        object["webDavUrl"] = params->webDavUrl;
+        object["webDavUsername"] = params->webDavUsername;
+        object["webDavTimeoutMsec"] = params->webDavTimeoutMsec;
         config << object;
     }
     QJsonDocument doc(config);
@@ -108,13 +112,57 @@ void RemoteSettings::fromConfig(const QString& data)
         auto itemMap = item.toMap();
         auto* params = new RemoteParams();
         params->name = itemMap["name"].toString();
+        params->transport = itemMap.value("transport", "command").toString() == "webdav"
+                                ? RemoteParams::Transport::WebDav
+                                : RemoteParams::Transport::Command;
         params->downloadCommand = itemMap["downloadCommand"].toString();
         params->downloadInput = itemMap["downloadCommandInput"].toString();
         params->downloadTimeoutMsec = itemMap.value("downloadTimeoutMsec", 10000).toInt();
         params->uploadCommand = itemMap["uploadCommand"].toString();
         params->uploadInput = itemMap["uploadCommandInput"].toString();
         params->uploadTimeoutMsec = itemMap.value("uploadTimeoutMsec", 10000).toInt();
+        params->webDavUrl = itemMap["webDavUrl"].toString();
+        params->webDavUsername = itemMap["webDavUsername"].toString();
+        params->webDavTimeoutMsec = itemMap.value("webDavTimeoutMsec", 30000).toInt();
 
         m_remoteParams.insert(params->name, params);
     }
+}
+
+QString RemoteSettings::credentialKey(const RemoteParams* params)
+{
+    if (!params) {
+        return {};
+    }
+    // Scope the stored secret to the exact remote it belongs to, so that
+    // editing the URL (in the database, possibly by somebody else) cannot make
+    // the client hand the saved password to a different server.
+    const auto identity = params->webDavUrl.trimmed() + QLatin1Char('\n') + params->webDavUsername;
+    return QString::fromLatin1(
+        QCryptographicHash::hash(identity.toUtf8(), QCryptographicHash::Sha256).toHex().left(32));
+}
+
+QString RemoteSettings::webDavPassword(const RemoteParams* params) const
+{
+    const auto key = credentialKey(params);
+    if (key.isEmpty()) {
+        return {};
+    }
+    const auto store = config()->get(Config::RemoteWebDavCredentials).toMap();
+    return store.value(key).toString();
+}
+
+void RemoteSettings::setWebDavPassword(const RemoteParams* params, const QString& password) const
+{
+    const auto key = credentialKey(params);
+    if (key.isEmpty()) {
+        return;
+    }
+    auto store = config()->get(Config::RemoteWebDavCredentials).toMap();
+    if (password.isEmpty()) {
+        store.remove(key);
+    } else {
+        store.insert(key, password);
+    }
+    config()->set(Config::RemoteWebDavCredentials, store);
 }

@@ -22,6 +22,9 @@
 
 #include "core/AsyncTask.h"
 #include "core/Database.h"
+#include "networking/WebDavClient.h"
+
+#include <QFile>
 
 namespace
 {
@@ -31,6 +34,28 @@ namespace
         uuid.chop(1);
         return QDir::toNativeSeparators(QDir::temp().absoluteFilePath("RemoteDatabase-" + uuid + ".kdbx"));
     }
+
+#ifdef KPXC_FEATURE_NETWORK
+    WebDavConfig webDavConfigFor(const RemoteParams* params, const QString& password)
+    {
+        WebDavConfig config;
+        config.url = params->webDavUrl;
+        config.username = params->webDavUsername;
+        config.password = password;
+        config.timeoutMsec = params->webDavTimeoutMsec > 0 ? params->webDavTimeoutMsec : 30000;
+        return config;
+    }
+
+    RemoteHandler::RemoteResult toRemoteResult(const WebDavClient::Result& result)
+    {
+        RemoteHandler::RemoteResult out;
+        out.success = result.isSuccess();
+        out.errorMessage = result.errorMessage;
+        out.conflict = result.isConflict();
+        out.etag = result.etag;
+        return out;
+    }
+#endif
 } // namespace
 
 std::function<QScopedPointer<RemoteProcess>(QObject*)> RemoteHandler::m_createRemoteProcess([](QObject* parent) {
@@ -47,16 +72,43 @@ void RemoteHandler::setRemoteProcessFunc(std::function<QScopedPointer<RemoteProc
     m_createRemoteProcess = std::move(func);
 }
 
-RemoteHandler::RemoteResult RemoteHandler::download(const RemoteParams* params)
+bool RemoteHandler::usesWebDav(const RemoteParams* params)
 {
+    return params && params->transport == RemoteParams::Transport::WebDav;
+}
+
+RemoteHandler::RemoteResult RemoteHandler::download(const RemoteParams* params, const QString& webDavPassword)
+{
+    if (!params) {
+        RemoteResult result;
+        result.errorMessage = tr("Invalid download parameters provided.");
+        return result;
+    }
+
+#ifdef KPXC_FEATURE_NETWORK
+    if (usesWebDav(params)) {
+        return AsyncTask::runAndWaitForFuture([params, webDavPassword] {
+            const auto filePath = getTempFileLocation();
+            WebDavClient client(webDavConfigFor(params, webDavPassword));
+            auto remote = client.download(filePath);
+
+            auto result = toRemoteResult(remote);
+            if (result.success) {
+                result.filePath = filePath;
+            }
+            return result;
+        });
+    }
+#else
+    if (usesWebDav(params)) {
+        RemoteResult result;
+        result.errorMessage = tr("This build of KeePassXC was compiled without networking support.");
+        return result;
+    }
+#endif
+
     return AsyncTask::runAndWaitForFuture([params] {
         RemoteResult result;
-        if (!params) {
-            result.success = false;
-            result.errorMessage = tr("Invalid download parameters provided.");
-            return result;
-        }
-
         auto filePath = getTempFileLocation();
         auto remoteProcess = m_createRemoteProcess(nullptr); // use nullptr parent, otherwise there is a warning
         remoteProcess->setTempFileLocation(filePath);
@@ -99,16 +151,48 @@ RemoteHandler::RemoteResult RemoteHandler::download(const RemoteParams* params)
     });
 }
 
-RemoteHandler::RemoteResult RemoteHandler::upload(const QString& filePath, const RemoteParams* params)
+RemoteHandler::RemoteResult
+RemoteHandler::upload(const QString& filePath, const RemoteParams* params, const QString& webDavPassword)
 {
+    if (!params) {
+        RemoteResult result;
+        result.errorMessage = tr("Invalid database pointer or upload parameters provided.");
+        return result;
+    }
+
+#ifdef KPXC_FEATURE_NETWORK
+    if (usesWebDav(params)) {
+        return AsyncTask::runAndWaitForFuture([filePath, params, webDavPassword] {
+            WebDavClient client(webDavConfigFor(params, webDavPassword));
+
+            // Upload conditionally against the validator we can see right now, so
+            // a change made by another device since our download is refused with
+            // a conflict instead of being silently overwritten.
+            const auto metadata = client.metadata();
+            switch (metadata.status) {
+            case WebDavClient::Status::Success:
+                return toRemoteResult(client.upload(filePath, metadata.etag, false));
+            case WebDavClient::Status::NotFound:
+                // Nothing there yet: create it, but fail if somebody else wins the race.
+                return toRemoteResult(client.upload(filePath, QString(), true));
+            case WebDavClient::Status::Denied:
+            case WebDavClient::Status::Conflict:
+            case WebDavClient::Status::Error:
+                return toRemoteResult(metadata);
+            }
+            return toRemoteResult(metadata);
+        });
+    }
+#else
+    if (usesWebDav(params)) {
+        RemoteResult result;
+        result.errorMessage = tr("This build of KeePassXC was compiled without networking support.");
+        return result;
+    }
+#endif
+
     return AsyncTask::runAndWaitForFuture([filePath, params] {
         RemoteResult result;
-        if (!params) {
-            result.success = false;
-            result.errorMessage = tr("Invalid database pointer or upload parameters provided.");
-            return result;
-        }
-
         auto remoteProcess = m_createRemoteProcess(nullptr); // use nullptr parent, otherwise there is a warning
         remoteProcess->setTempFileLocation(filePath);
         remoteProcess->start(params->uploadCommand);
@@ -142,4 +226,30 @@ RemoteHandler::RemoteResult RemoteHandler::upload(const QString& filePath, const
 
         return result;
     });
+}
+
+RemoteHandler::RemoteResult RemoteHandler::testWebDav(const RemoteParams* params, const QString& webDavPassword)
+{
+    RemoteResult result;
+    if (!params) {
+        result.errorMessage = tr("Invalid connection parameters provided.");
+        return result;
+    }
+
+#ifdef KPXC_FEATURE_NETWORK
+    return AsyncTask::runAndWaitForFuture([params, webDavPassword] {
+        WebDavClient client(webDavConfigFor(params, webDavPassword));
+        bool exists = false;
+        auto remote = client.testConnection(&exists);
+        auto out = toRemoteResult(remote);
+        if (out.success && !exists) {
+            // A missing file is a normal state for a first upload.
+            out.errorMessage = tr("Connected. The remote file does not exist yet and will be created on upload.");
+        }
+        return out;
+    });
+#else
+    result.errorMessage = tr("This build of KeePassXC was compiled without networking support.");
+    return result;
+#endif
 }

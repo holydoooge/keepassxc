@@ -83,6 +83,8 @@ public:
         LastActiveDatabase,
         LastOpenedDatabases,
         LastDir,
+        /** WebDAV secrets, kept local so a shared database cannot leak them. */
+        RemoteWebDavCredentials,
 
         GUI_Language,
         GUI_HideMenubar,

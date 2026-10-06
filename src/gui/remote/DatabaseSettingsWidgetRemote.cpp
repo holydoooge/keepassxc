@@ -23,6 +23,7 @@
 
 #include "RemoteHandler.h"
 #include "RemoteSettings.h"
+#include "RemoteWebDavDialog.h"
 #include "gui/MessageBox.h"
 
 #include <QFile>
@@ -43,6 +44,16 @@ DatabaseSettingsWidgetRemote::DatabaseSettingsWidgetRemote(QWidget* parent)
             this,
             &DatabaseSettingsWidgetRemote::editCurrentSettings);
     connect(m_ui->testDownloadCommandButton, &QPushButton::clicked, this, &DatabaseSettingsWidgetRemote::testDownload);
+    connect(m_ui->webDavConfigureButton, &QPushButton::clicked, this, &DatabaseSettingsWidgetRemote::configureWebDav);
+
+    connect(m_ui->transportComboBox,
+            QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this,
+            [this](int index) {
+                m_webDavMode = (index == 1);
+                m_modified = true;
+                updateWebDavSummary();
+            });
 
     auto setModified = [this]() { m_modified = true; };
     connect(m_ui->nameLineEdit, &QLineEdit::textChanged, setModified);
@@ -52,6 +63,8 @@ DatabaseSettingsWidgetRemote::DatabaseSettingsWidgetRemote(QWidget* parent)
     connect(m_ui->uploadCommand, &QLineEdit::textChanged, setModified);
     connect(m_ui->inputForUpload, &QPlainTextEdit::textChanged, setModified);
     connect(m_ui->uploadTimeoutSec, QOverload<int>::of(&QSpinBox::valueChanged), setModified);
+
+    updateWebDavSummary();
 }
 
 DatabaseSettingsWidgetRemote::~DatabaseSettingsWidgetRemote() = default;
@@ -102,12 +115,20 @@ void DatabaseSettingsWidgetRemote::saveCurrentSettings()
 
     auto* params = new RemoteParams();
     params->name = m_ui->nameLineEdit->text();
+    params->transport = m_webDavMode ? RemoteParams::Transport::WebDav : RemoteParams::Transport::Command;
     params->downloadCommand = m_ui->downloadCommand->text();
     params->downloadInput = m_ui->inputForDownload->toPlainText();
     params->downloadTimeoutMsec = m_ui->downloadTimeoutSec->value() * 1000;
     params->uploadCommand = m_ui->uploadCommand->text();
     params->uploadInput = m_ui->inputForUpload->toPlainText();
     params->uploadTimeoutMsec = m_ui->uploadTimeoutSec->value() * 1000;
+    params->webDavUrl = m_webDavUrl;
+    params->webDavUsername = m_webDavUsername;
+    params->webDavTimeoutMsec = m_ui->downloadTimeoutSec->value() * 1000;
+
+    // The password never enters the database; it is stored per-machine and keyed
+    // by the exact remote it belongs to (see RemoteSettings::webDavPassword).
+    m_remoteSettings->setWebDavPassword(params, m_webDavPassword);
 
     m_remoteSettings->addRemoteParams(params);
     updateSettingsList();
@@ -155,7 +176,87 @@ void DatabaseSettingsWidgetRemote::editCurrentSettings()
     m_ui->uploadCommand->setText(params->uploadCommand);
     m_ui->inputForUpload->setPlainText(params->uploadInput);
     m_ui->uploadTimeoutSec->setValue(params->uploadTimeoutMsec / 1000);
+
+    m_webDavMode = (params->transport == RemoteParams::Transport::WebDav);
+    m_webDavUrl = params->webDavUrl;
+    m_webDavUsername = params->webDavUsername;
+    // Re-read the locally stored secret; it is absent on a machine that has
+    // never used this remote, in which case the user is asked for it again.
+    m_webDavPassword = m_remoteSettings->webDavPassword(params);
+    if (params->webDavTimeoutMsec > 0) {
+        m_ui->downloadTimeoutSec->setValue(params->webDavTimeoutMsec / 1000);
+    }
+
+    // setCurrentIndex triggers the change handler, which is harmless here.
+    m_ui->transportComboBox->setCurrentIndex(m_webDavMode ? 1 : 0);
+    updateWebDavSummary();
     m_modified = false;
+}
+
+void DatabaseSettingsWidgetRemote::configureWebDav()
+{
+    RemoteWebDavDialog dialog(this);
+    dialog.setUrl(m_webDavUrl);
+    dialog.setUsername(m_webDavUsername);
+    dialog.setPassword(m_webDavPassword);
+    dialog.setTimeoutSec(m_ui->downloadTimeoutSec->value());
+
+    connect(&dialog, &RemoteWebDavDialog::testRequested, this, [this, &dialog] {
+        RemoteParams params;
+        params.transport = RemoteParams::Transport::WebDav;
+        params.webDavUrl = dialog.url();
+        params.webDavUsername = dialog.username();
+        params.webDavTimeoutMsec = dialog.timeoutSec() * 1000;
+
+        RemoteHandler handler(this);
+        const auto result = handler.testWebDav(&params, dialog.password());
+        if (result.success) {
+            dialog.setStatusMessage(result.errorMessage.isEmpty()
+                                        ? tr("Connected successfully.")
+                                        : result.errorMessage,
+                                    false);
+        } else {
+            dialog.setStatusMessage(tr("Connection failed: %1").arg(result.errorMessage), true);
+        }
+    });
+
+    if (dialog.exec() != QDialog::Accepted) {
+        return;
+    }
+
+    m_webDavUrl = dialog.url();
+    m_webDavUsername = dialog.username();
+    m_webDavPassword = dialog.password();
+
+    if (m_webDavUrl.isEmpty()) {
+        m_ui->messageWidget->showMessage(tr("The WebDAV URL cannot be empty."), MessageWidget::Warning);
+        return;
+    }
+
+    m_webDavMode = true;
+    m_ui->transportComboBox->setCurrentIndex(1);
+    m_ui->downloadTimeoutSec->setValue(dialog.timeoutSec());
+    updateWebDavSummary();
+    m_modified = true;
+}
+
+void DatabaseSettingsWidgetRemote::updateWebDavSummary()
+{
+    if (m_webDavUrl.isEmpty()) {
+        m_ui->webDavSummaryLabel->setText(tr("No WebDAV server configured yet."));
+    } else {
+        auto summary = tr("WebDAV: %1 (user %2)").arg(m_webDavUrl, m_webDavUsername.isEmpty()
+                                                                      ? tr("none")
+                                                                      : m_webDavUsername);
+        if (m_webDavPassword.isEmpty()) {
+            summary += QLatin1Char(' ') + tr("— no password stored on this computer yet.");
+        }
+        m_ui->webDavSummaryLabel->setText(summary);
+    }
+
+    // The command fields are meaningless in WebDAV mode.
+    m_ui->commandTabWidget->setEnabled(!m_webDavMode);
+    m_ui->webDavConfigureButton->setEnabled(m_webDavMode);
 }
 
 void DatabaseSettingsWidgetRemote::updateSettingsList()
@@ -177,24 +278,32 @@ void DatabaseSettingsWidgetRemote::clearFields()
     m_ui->uploadCommand->setText("");
     m_ui->inputForUpload->setPlainText("");
     m_ui->uploadTimeoutSec->setValue(10);
+
+    m_webDavMode = false;
+    m_webDavUrl.clear();
+    m_webDavUsername.clear();
+    m_webDavPassword.clear();
+    m_ui->transportComboBox->setCurrentIndex(0);
+    updateWebDavSummary();
+
     m_modified = false;
 }
 
 void DatabaseSettingsWidgetRemote::testDownload()
 {
-    auto* params = new RemoteParams();
-    params->name = m_ui->nameLineEdit->text();
-    params->downloadCommand = m_ui->downloadCommand->text();
-    params->downloadInput = m_ui->inputForDownload->toPlainText();
-    params->downloadTimeoutMsec = m_ui->downloadTimeoutSec->value() * 1000;
+    RemoteParams params;
+    params.name = m_ui->nameLineEdit->text();
+    params.downloadCommand = m_ui->downloadCommand->text();
+    params.downloadInput = m_ui->inputForDownload->toPlainText();
+    params.downloadTimeoutMsec = m_ui->downloadTimeoutSec->value() * 1000;
 
     QScopedPointer<RemoteHandler> remoteHandler(new RemoteHandler(this));
-    if (params->downloadCommand.isEmpty()) {
+    if (params.downloadCommand.isEmpty()) {
         m_ui->messageWidget->showMessage(tr("Download command cannot be empty."), MessageWidget::Warning);
         return;
     }
 
-    RemoteHandler::RemoteResult result = remoteHandler->download(params);
+    RemoteHandler::RemoteResult result = remoteHandler->download(&params);
     if (!result.success) {
         m_ui->messageWidget->showMessage(tr("Download failed with error: %1").arg(result.errorMessage),
                                          MessageWidget::Error);

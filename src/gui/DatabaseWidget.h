@@ -156,6 +156,8 @@ signals:
     void databaseSyncInProgress();
     void databaseSyncCompleted(const QString& syncName);
     void databaseSyncFailed(const QString& syncName, const QString& error);
+    /** Another device changed the remote copy; the upload was refused. */
+    void databaseSyncConflict(const QString& syncName, const QString& error);
     void databaseSyncUnlockFailed(const RemoteHandler::RemoteResult& result);
     void databaseSyncUnlocked(const RemoteHandler::RemoteResult& result);
     void unlockDatabaseInDialogForSync(const QString& filePath);

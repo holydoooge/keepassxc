@@ -34,15 +34,28 @@ public:
 
     struct RemoteResult
     {
-        bool success;
+        bool success = false;
         QString errorMessage;
         QString filePath;
         QString stdOutput;
         QString stdError;
+        /** The remote copy changed underneath us; the caller must merge again. */
+        bool conflict = false;
+        /** ETag of the revision that was read or written, when the server sent one. */
+        QString etag;
     };
 
-    RemoteResult download(const RemoteParams* params);
-    RemoteResult upload(const QString& filePath, const RemoteParams* params);
+    RemoteResult download(const RemoteParams* params, const QString& webDavPassword = QString());
+    RemoteResult upload(const QString& filePath, const RemoteParams* params, const QString& webDavPassword = QString());
+
+    /**
+     * True when the parameters describe a built-in WebDAV remote rather than a
+     * pair of user-supplied commands.
+     */
+    static bool usesWebDav(const RemoteParams* params);
+
+    /** Connection check for the settings dialog. */
+    RemoteResult testWebDav(const RemoteParams* params, const QString& webDavPassword = QString());
 
     // Used for testing only
     static void setRemoteProcessFunc(std::function<QScopedPointer<RemoteProcess>(QObject*)> func);

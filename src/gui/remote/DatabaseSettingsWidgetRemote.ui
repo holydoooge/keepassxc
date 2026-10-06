@@ -122,7 +122,49 @@
           </item>
          </layout>
         </item>
+        <item row="1" column="0">
+         <widget class="QLabel" name="transportLabel">
+          <property name="text">
+           <string>Type</string>
+          </property>
+         </widget>
+        </item>
         <item row="1" column="1">
+         <layout class="QHBoxLayout" name="transportLayout">
+          <item>
+           <widget class="QComboBox" name="transportComboBox">
+            <item>
+             <property name="text">
+              <string>Sync commands (external tool)</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>WebDAV (built-in client)</string>
+             </property>
+            </item>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="webDavConfigureButton">
+            <property name="text">
+             <string>Configure WebDAV…</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+        <item row="2" column="0" colspan="2">
+         <widget class="QLabel" name="webDavSummaryLabel">
+          <property name="text">
+           <string>No WebDAV server configured.</string>
+          </property>
+          <property name="wordWrap">
+           <bool>true</bool>
+          </property>
+         </widget>
+        </item>
+        <item row="3" column="0" colspan="2">
          <widget class="QTabWidget" name="commandTabWidget">
           <property name="currentIndex">
            <number>0</number>

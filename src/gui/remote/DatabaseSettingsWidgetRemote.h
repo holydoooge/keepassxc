@@ -50,15 +50,29 @@ private slots:
     void removeCurrentSettings();
     void editCurrentSettings();
     void testDownload();
+    /** Opens the WebDAV settings dialog and switches the remote to WebDAV mode. */
+    void configureWebDav();
 
 private:
     void updateSettingsList();
     QListWidgetItem* findItemByName(const QString& name);
     void clearFields();
+    /** Applies the WebDAV connection summary to the read-only UI fields. */
+    void updateWebDavSummary();
 
     QScopedPointer<RemoteSettings> m_remoteSettings;
     const QScopedPointer<Ui::DatabaseSettingsWidgetRemote> m_ui;
     bool m_modified = false;
+
+    // WebDAV transport state. The password is deliberately not part of
+    // RemoteParams: it is written to the local configuration instead.
+    bool m_webDavMode = false;
+    QString m_webDavUrl;
+    QString m_webDavUsername;
+    QString m_webDavPassword;
+    class QComboBox* m_transportCombo = nullptr;
+    class QLabel* m_webDavSummary = nullptr;
+    class QPushButton* m_webDavConfigureButton = nullptr;
 };
 
 #endif // KEEPASSX_DATABASESETTINGSWIDGETREMOTE_H
