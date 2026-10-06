@@ -21,6 +21,7 @@
 #include "networking/WebDavClient.h"
 
 #include <QDir>
+#include <QElapsedTimer>
 #include <QFile>
 #include <QProcess>
 #include <QRegularExpression>
