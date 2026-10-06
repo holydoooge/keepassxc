@@ -187,37 +187,27 @@ jobs:
           grep " (Failed)" /tmp/ctest.log || true
           exit 1
 
-      - name: Diagnose testdatabase
-        # Always runs so the flaky test can be analysed from the artifacts.
+      - name: Verify every test executable can start
+        # A silent ctest failure with no output is the signature of
+        # STATUS_DLL_NOT_FOUND (0xC0000135) rather than an assertion failure, so
+        # assert separately that each test binary actually starts. Listing the
+        # test functions proves the binary, its Qt DLLs and the MinGW runtime all
+        # resolved; any remaining test failure is then a real test failure.
         if: always()
-        shell: pwsh
         run: |
-          $exe = 'D:\kpxc-build\tests\testdatabase.exe'
-          $out = 'D:\kpxc-diag\testdatabase-output.txt'
-          New-Item -ItemType Directory -Force -Path 'D:\kpxc-diag' | Out-Null
-          if (-not (Test-Path $exe)) {
-            "not built: $exe" | Tee-Object -FilePath $out
-            exit 0
-          }
-
-          "=== Qt DLL resolution ===" | Tee-Object -FilePath $out
-          (Get-Command Qt6Core.dll -ErrorAction SilentlyContinue) |
-            Format-Table CommandType, Name, Version, Source -AutoSize |
-            Out-String | Tee-Object -FilePath $out -Append
-
-          "=== listed test functions ===" | Tee-Object -FilePath $out -Append
-          (& $exe -functions 2>&1 | Out-String) | Tee-Object -FilePath $out -Append
-
-          "=== full verbose run (plain-text results on stdout) ===" | Tee-Object -FilePath $out -Append
-          (& $exe -v2 -o -,txt 2>&1 | Out-String) | Tee-Object -FilePath $out -Append
-          "exit code: $LASTEXITCODE" | Tee-Object -FilePath $out -Append
-
-          "=== quiet run, results only ===" | Tee-Object -FilePath $out -Append
-          (& $exe -o -,txt 2>&1 | Out-String) | Tee-Object -FilePath $out -Append
-          "exit code: $LASTEXITCODE" | Tee-Object -FilePath $out -Append
-
-          Write-Host "--- captured output ---"
-          Get-Content $out | Write-Host
+          cd "$BUILD_DIR/tests"
+          failed_probe=0
+          for t in test*.exe; do
+            [ -e "$t" ] || continue
+            if ./"$t" -functions >/dev/null 2>&1; then
+              echo "  starts OK   $t"
+            else
+              echo "  START FAILS $t (exit $?)"
+              failed_probe=$((failed_probe + 1))
+            fi
+          done
+          echo "startup failures: $failed_probe"
+          exit $failed_probe
 
       - name: Stage portable application (runs windeployqt)
         run: |
