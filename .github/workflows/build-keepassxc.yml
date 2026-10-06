@@ -253,6 +253,27 @@ jobs:
           echo "=== WebDAV test diagnostics ==="
           head -c 6000 "$out"
 
+          # ctest is the authoritative signal: it runs the binary with the same
+          # environment as the rest of the suite and reports the result reliably.
+          # Invoking the binary by hand from this shell crashes it before it can
+          # write anything (exit 1, zero bytes on both streams), so a direct run
+          # is only ever used for diagnostics above, never for the verdict.
+          echo "=== authoritative result via ctest ==="
+          ctest -R '^testwebdavclient$' --output-on-failure 2>&1 | tee "$DIAG_DIR/webdav-ctest.log"
+          ctest_status=${PIPESTATUS[0]}
+
+          if [ "$ctest_status" -ne 0 ]; then
+            echo "::error title=WebDAV transport untested::testwebdavclient did not pass under ctest"
+            exit 1
+          fi
+
+          # A skipped test exits 0, so confirm the assertions actually ran.
+          if ! grep -q 'tests passed out of 1' "$DIAG_DIR/webdav-ctest.log"; then
+            echo "::error title=WebDAV test did not run::ctest did not report a passing test"
+            exit 1
+          fi
+          echo "WebDAV transport verified: testwebdavclient passed under ctest"
+
           echo "=== WebDAV test diagnostics ==="
           head -c 5000 "$out"
 
