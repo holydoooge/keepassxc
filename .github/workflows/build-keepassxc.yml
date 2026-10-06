@@ -287,23 +287,29 @@ jobs:
 
       - name: Package ZIP
         run: |
+          echo "=== contents of the staging directory ==="
+          ls -la "$STAGE_DIR" | head -n 25
+          echo "=== any archives in it? ==="
+          find "$STAGE_DIR" -maxdepth 2 -iname '*.zip' -o -maxdepth 2 -iname '*.7z' | head -n 10
+
           # MSYS2 rewrites bare arguments such as "." into a Windows path, which
-          # makes 7z store the staged directory itself and produces a doubly
-          # nested archive. Excluding conversion keeps the argument literal.
+          # makes 7z store the staged directory itself. Exclude conversion so the
+          # argument stays literal, and skip anything that is itself an archive.
           cd "$STAGE_DIR"
-          MSYS2_ARG_CONV_EXCL="*" 7z a -tzip "$GITHUB_WORKSPACE/KeePassXC-windows-x64.zip" .
+          MSYS2_ARG_CONV_EXCL="*" 7z a -tzip "$GITHUB_WORKSPACE/KeePassXC-windows-x64.zip" . -x'!*.zip' -x'!*.7z'
           cd "$GITHUB_WORKSPACE"
 
           echo "=== archive contents (first entries) ==="
-          7z l KeePassXC-windows-x64.zip | sed -n '15,30p'
+          7z l KeePassXC-windows-x64.zip | sed -n '15,32p'
 
-          # Assert the layout: a single top-level executable, no wrapping folder.
+          # Assert the layout: KeePassXC.exe at the root, no wrapping folder and
+          # no nested archive.
           if ! 7z l KeePassXC-windows-x64.zip | grep -qE ' KeePassXC\.exe$'; then
             echo "::error title=Bad archive layout::KeePassXC.exe is not at the archive root"
             exit 1
           fi
-          if 7z l KeePassXC-windows-x64.zip | grep -qE ' [^ ]+\.zip$'; then
-            echo "::error title=Bad archive layout::the archive contains another archive (nested packaging)"
+          if 7z l KeePassXC-windows-x64.zip | grep -qE '\.zip$'; then
+            echo "::error title=Bad archive layout::the archive contains another archive"
             exit 1
           fi
           echo "archive layout OK"
