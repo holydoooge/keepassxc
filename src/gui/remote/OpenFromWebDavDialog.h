@@ -47,6 +47,8 @@ class OpenFromWebDavDialog : public QDialog
 
 public:
     explicit OpenFromWebDavDialog(QWidget* parent = nullptr);
+    // Defined in the .cpp so QScopedPointer's deleter sees the complete type.
+    ~OpenFromWebDavDialog() override;
 
     /** Absolute path of the downloaded mirror; only valid after acceptance. */
     QString localFilePath() const;

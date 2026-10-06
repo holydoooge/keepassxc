@@ -120,6 +120,8 @@ QString OpenFromWebDavDialog::url() const
     return m_urlEdit->text().trimmed();
 }
 
+OpenFromWebDavDialog::~OpenFromWebDavDialog() = default;
+
 WebDavConfig OpenFromWebDavDialog::webDavConfig() const
 {
     WebDavConfig config;
