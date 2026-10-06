@@ -65,10 +65,6 @@ jobs:
           msystem: MINGW64
           update: false
           path-type: inherit
-          # MINGW64 is deprecated in favour of UCRT64; keep it for now because
-          # the windeployqt/Qt6 packaging path is proven there, and silence the
-          # warning so real errors stand out.
-          suppress-deprecation-warnings: true
 
       - name: Install build dependencies
         run: |
@@ -115,7 +111,30 @@ jobs:
             -DOVERRIDE_VERSION="2.9.0-snapshot" \
             -DWITH_TESTS=ON \
             -DWITH_GUI_TESTS=OFF \
-            -DKPXC_FEATURE_NETWORK=ON
+            -DKPXC_FEATURE_NETWORK=ON \
+            -DKPXC_FEATURE_DOCS=OFF \
+            -DKPXC_FEATURE_UPDATES=OFF
+          # docs/CMakeLists.txt hard-fails without asciidoctor, hence DOCS=OFF.
+          # UPDATES=OFF keeps the build from reaching out to the update server.
+
+      - name: Verify configuration landed as intended
+        run: |
+          # Assert the flags we depend on actually took effect.
+          fail=0
+          check() {
+            if grep -q "^$1:BOOL=$2$" "$BUILD_DIR/CMakeCache.txt"; then
+              echo "OK   $1=$2"
+            else
+              echo "FAIL $1 is not $2"
+              grep "^$1:" "$BUILD_DIR/CMakeCache.txt" || echo "     (not present)"
+              fail=1
+            fi
+          }
+          check KPXC_FEATURE_NETWORK ON
+          check KPXC_FEATURE_DOCS OFF
+          check WITH_TESTS ON
+          check WITH_GUI_TESTS OFF
+          exit $fail
 
       - name: Build
         run: cmake --build "$BUILD_DIR" --parallel
