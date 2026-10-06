@@ -33,6 +33,11 @@ class TestWebDavClient : public QObject
 {
     Q_OBJECT
 
+public:
+    explicit TestWebDavClient(QObject* parent = nullptr);
+    // Defined in the .cpp so QScopedPointer's deleter sees the complete types.
+    ~TestWebDavClient() override;
+
 private slots:
     void initTestCase();
     void cleanupTestCase();

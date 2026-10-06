@@ -39,6 +39,8 @@ TestWebDavClient::TestWebDavClient(QObject* parent)
 {
 }
 
+TestWebDavClient::~TestWebDavClient() = default;
+
 void TestWebDavClient::initTestCase()
 {
     m_tempDir.reset(new QTemporaryDir());
