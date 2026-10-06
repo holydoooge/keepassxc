@@ -5,4 +5,9 @@
 
 #define KEEPASSX_TEST_DATA_DIR "${KEEPASSX_TEST_DATA_DIR}"
 
+/* Python interpreter and helper server used by the WebDAV tests. Empty when
+   Python was not found; the tests skip themselves in that case. */
+#define KEEPASSXC_TEST_PYTHON "${KEEPASSXC_TEST_PYTHON}"
+#define KEEPASSXC_TEST_WEBDAV_SERVER "${KEEPASSXC_TEST_WEBDAV_SERVER}"
+
 #endif // KEEPASSX_CONFIG_TESTS_H

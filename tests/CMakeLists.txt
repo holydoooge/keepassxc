@@ -25,6 +25,21 @@ add_definitions(-DQT_TEST_LIB -DQT_NO_USE_NODISCARD_FILE_OPEN)
 set(KEEPASSX_TEST_DATA_DIR ${CMAKE_CURRENT_SOURCE_DIR}/data)
 configure_file(config-keepassx-tests.h.in ${CMAKE_CURRENT_BINARY_DIR}/config-keepassx-tests.h)
 
+# WebDAV tests talk to a stdlib-only Python server shipped next to the test, so
+# no external service or network access is needed.
+set(KEEPASSXC_TEST_WEBDAV_SERVER "")
+find_package(Python3 COMPONENTS Interpreter QUIET)
+if(Python3_Interpreter_FOUND)
+    set(KEEPASSXC_TEST_PYTHON "${Python3_EXECUTABLE}")
+    set(KEEPASSXC_TEST_WEBDAV_SERVER "${CMAKE_CURRENT_BINARY_DIR}/webdav_test_server.py")
+    configure_file(${CMAKE_CURRENT_SOURCE_DIR}/webdav_test_server.py
+            ${KEEPASSXC_TEST_WEBDAV_SERVER} COPYONLY)
+    message(STATUS "WebDAV tests will use Python: ${Python3_EXECUTABLE}")
+else()
+    set(KEEPASSXC_TEST_PYTHON "")
+    message(STATUS "Python not found: WebDAV tests will be skipped")
+endif()
+
 function(add_unit_test)
     cmake_parse_arguments(TEST "" "NAME" "SOURCES;LIBS;LAUNCHER" ${ARGN})
     add_executable(${TEST_NAME} ${TEST_SOURCES})
@@ -195,6 +210,10 @@ if(KPXC_FEATURE_NETWORK)
         LIBS ${TEST_LIBRARIES})
 
     add_unit_test(NAME testicondownloader SOURCES TestIconDownloader.cpp 
+        LIBS ${TEST_LIBRARIES})
+
+    # Runs against tests/webdav_test_server.py; skips itself when Python is absent.
+    add_unit_test(NAME testwebdavclient SOURCES TestWebDavClient.cpp
         LIBS ${TEST_LIBRARIES})
 endif()
 

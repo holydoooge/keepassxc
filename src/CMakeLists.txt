@@ -314,6 +314,7 @@ if(KPXC_FEATURE_NETWORK)
             networking/HibpDownloader.cpp
             networking/NetworkManager.cpp
             networking/UpdateChecker.cpp
+            networking/WebDavClient.cpp
             gui/UpdateCheckDialog.cpp
             gui/IconDownloader.cpp
             gui/IconDownloaderDialog.cpp)

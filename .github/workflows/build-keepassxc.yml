@@ -26,11 +26,13 @@ on:
       - "src/**"
       - "cmake/**"
       - "share/**"
+      - "tests/**"
       - "CMakeLists.txt"
       - ".github/workflows/build-keepassxc.yml"
   pull_request:
     paths:
       - "src/**"
+      - "tests/**"
       - "CMakeLists.txt"
       - ".github/workflows/build-keepassxc.yml"
 
@@ -47,6 +49,7 @@ jobs:
       # Keep the build tree off C:; Windows runners have more room on D:.
       BUILD_DIR: D:/kpxc-build
       STAGE_DIR: D:/kpxc-stage
+      DIAG_DIR: D:/kpxc-diag
 
     defaults:
       run:
@@ -168,10 +171,10 @@ jobs:
             exit 0
           fi
 
-          # testdatabase is allowed to fail: its QFileSystemWatcher assertions
-          # (QTRY_COMPARE on modified/fileChanged spies) are not reliable on
-          # Windows CI. Any other failure, or failure of any other test, fails
-          # the build.
+          # TEMPORARY: testdatabase is allowed to fail while it is being
+          # diagnosed (its QFileSystemWatcher assertions are unreliable on
+          # Windows CI). Remove this exemption once the root cause is fixed.
+          # Any other failure, or failure of any other test, fails the build.
           if grep -q "The following tests FAILED" /tmp/ctest.log \
              && grep -q "testdatabase (Failed)" /tmp/ctest.log \
              && [ "$(grep -c ' (Failed)' /tmp/ctest.log)" -eq 1 ]; then
@@ -184,27 +187,37 @@ jobs:
           grep " (Failed)" /tmp/ctest.log || true
           exit 1
 
-      - name: Capture testdatabase output
-        # Runs even when the test step fails, to explain a silent test failure
-        # (no output at all usually means the process could not start).
+      - name: Diagnose testdatabase
+        # Always runs so the flaky test can be analysed from the artifacts.
         if: always()
         shell: pwsh
         run: |
           $exe = 'D:\kpxc-build\tests\testdatabase.exe'
-          if (-not (Test-Path $exe)) { Write-Host "not built: $exe"; exit 0 }
+          $out = 'D:\kpxc-diag\testdatabase-output.txt'
+          New-Item -ItemType Directory -Force -Path 'D:\kpxc-diag' | Out-Null
+          if (-not (Test-Path $exe)) {
+            "not built: $exe" | Tee-Object -FilePath $out
+            exit 0
+          }
 
-          Write-Host "--- Qt on PATH? ---"
+          "=== Qt DLL resolution ===" | Tee-Object -FilePath $out
           (Get-Command Qt6Core.dll -ErrorAction SilentlyContinue) |
             Format-Table CommandType, Name, Version, Source -AutoSize |
-            Out-String | Write-Host
+            Out-String | Tee-Object -FilePath $out -Append
 
-          Write-Host "--- bare run (no args) ---"
-          & $exe 2>&1 | Out-String -Width 200 | Write-Host
-          Write-Host "bare run exit code: $LASTEXITCODE"
+          "=== listed test functions ===" | Tee-Object -FilePath $out -Append
+          (& $exe -functions 2>&1 | Out-String) | Tee-Object -FilePath $out -Append
 
-          Write-Host "--- verbose run (-v2, results to stdout) ---"
-          & $exe -v2 -o -,txt 2>&1 | Out-String -Width 200 | Write-Host
-          Write-Host "verbose run exit code: $LASTEXITCODE"
+          "=== full verbose run (plain-text results on stdout) ===" | Tee-Object -FilePath $out -Append
+          (& $exe -v2 -o -,txt 2>&1 | Out-String) | Tee-Object -FilePath $out -Append
+          "exit code: $LASTEXITCODE" | Tee-Object -FilePath $out -Append
+
+          "=== quiet run, results only ===" | Tee-Object -FilePath $out -Append
+          (& $exe -o -,txt 2>&1 | Out-String) | Tee-Object -FilePath $out -Append
+          "exit code: $LASTEXITCODE" | Tee-Object -FilePath $out -Append
+
+          Write-Host "--- captured output ---"
+          Get-Content $out | Write-Host
 
       - name: Stage portable application (runs windeployqt)
         run: |
@@ -213,7 +226,12 @@ jobs:
 
       - name: Package ZIP
         run: |
-          7z a -tzip "$GITHUB_WORKSPACE/KeePassXC-windows-x64.zip" "$STAGE_DIR"/*
+          # 'cd' first: passing "$STAGE_DIR"/* lets 7z store the 'stage'
+          # directory itself, producing a doubly nested archive.
+          cd "$STAGE_DIR"
+          7z a -tzip "$GITHUB_WORKSPACE/KeePassXC-windows-x64.zip" .
+          cd "$GITHUB_WORKSPACE"
+          7z l KeePassXC-windows-x64.zip | head -n 25
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
@@ -226,15 +244,14 @@ jobs:
       - name: Collect diagnostics
         if: always()
         run: |
-          mkdir -p /d/kpxc-diag
-          # Out-of-tree copies so they survive the build dir being large.
-          cp -f "$BUILD_DIR/Testing/Temporary/LastTest.log" /d/kpxc-diag/ 2>/dev/null || true
-          cp -f "$BUILD_DIR/Testing/Temporary/LastTestsFailed.log" /d/kpxc-diag/ 2>/dev/null || true
-          cp -f "$BUILD_DIR/CMakeCache.txt" /d/kpxc-diag/ 2>/dev/null || true
-          cp -f "$BUILD_DIR/tests/testdatabase.exe" /d/kpxc-diag/ 2>/dev/null || true
-          ls -l /d/kpxc-diag
+          mkdir -p "$DIAG_DIR"
+          cp -f "$BUILD_DIR/Testing/Temporary/LastTest.log" "$DIAG_DIR/" 2>/dev/null || true
+          cp -f "$BUILD_DIR/Testing/Temporary/LastTestsFailed.log" "$DIAG_DIR/" 2>/dev/null || true
+          cp -f "$BUILD_DIR/CMakeCache.txt" "$DIAG_DIR/" 2>/dev/null || true
+          cp -f /tmp/ctest.log "$DIAG_DIR/ctest-raw.log" 2>/dev/null || true
+          ls -l "$DIAG_DIR"
 
-      - name: Upload diagnostics on failure
+      - name: Upload diagnostics
         if: always()
         uses: actions/upload-artifact@v4
         with:
