@@ -24,6 +24,7 @@
 
 #include "networking/WebDavClient.h"
 
+#include <QCoreApplication>
 #include <QHash>
 #include <QString>
 
@@ -46,6 +47,10 @@ class QWidget;
  */
 class RemoteDatabaseSession
 {
+    // Not a QObject: it is a plain value-like session object. This provides the
+    // tr() used for the conflict and failure dialogs.
+    Q_DECLARE_TR_FUNCTIONS(RemoteDatabaseSession)
+
 public:
     RemoteDatabaseSession(const WebDavConfig& config, const QString& mirrorFilePath, const QString& etag);
 

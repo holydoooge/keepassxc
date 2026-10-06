@@ -157,7 +157,9 @@ void OpenFromWebDavDialog::startDownload()
     }
 
     const auto mirror = mirrorPathFor(url());
-    const auto config = webDavConfig();
+    // Named webDavConfig, not config: a local called 'config' would shadow the
+    // global config() accessor used further down.
+    const auto webDavConfig = this->webDavConfig();
 
     QProgressDialog progress(tr("Downloading the database from the server…"), tr("Cancel"), 0, 0, this);
     progress.setWindowModality(Qt::WindowModal);
@@ -166,7 +168,7 @@ void OpenFromWebDavDialog::startDownload()
     QApplication::processEvents();
 
     m_localFilePath.clear();
-    auto result = WebDavClient(config).download(mirror);
+    auto result = WebDavClient(webDavConfig).download(mirror);
     progress.close();
 
     if (!result.isSuccess()) {
@@ -188,7 +190,7 @@ void OpenFromWebDavDialog::startDownload()
     }
 
     m_localFilePath = mirror;
-    m_session.reset(new RemoteDatabaseSession(config, mirror, result.etag));
+    m_session.reset(new RemoteDatabaseSession(webDavConfig, mirror, result.etag));
 
     if (m_rememberCheck->isChecked()) {
         config()->set(Config::RemoteWebDavLastUrl, url());
