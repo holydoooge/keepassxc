@@ -223,9 +223,14 @@ jobs:
           ctest -R testwebdavclient --output-on-failure -V 2>&1 | tail -n 80
 
           echo "=== asserting the assertions actually ran ==="
-          ./tests/testwebdavclient.exe -o -,txt 2>&1 | tail -n 40
+          # -v2 is required: QSKIP and qWarning output is otherwise suppressed,
+          # which makes a skipped test indistinguishable from a passing one.
+          ./tests/testwebdavclient.exe -v2 2>&1 | tail -n 60
           status=${PIPESTATUS[0]}
           echo "testwebdavclient exit status: $status"
+
+          echo "=== did the test server file get deployed next to the test? ==="
+          ls -l tests/webdav_test_server.py 2>&1 || echo "MISSING"
 
           if [ "$status" -eq 0 ]; then
             echo "WebDAV test completed (a skip would still exit 0, see the output above)"
