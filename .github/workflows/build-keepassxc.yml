@@ -65,6 +65,10 @@ jobs:
           msystem: MINGW64
           update: false
           path-type: inherit
+          # MINGW64 is deprecated in favour of UCRT64; keep it for now because
+          # the windeployqt/Qt6 packaging path is proven there, and silence the
+          # warning so real errors stand out.
+          suppress-deprecation-warnings: true
 
       - name: Install build dependencies
         run: |
@@ -80,8 +84,9 @@ jobs:
             mingw-w64-x86_64-zlib \
             mingw-w64-x86_64-minizip \
             mingw-w64-x86_64-qrencode \
-            mingw-w64-x86_64-readline \
-            mingw-w64-x86_64-pcsclite
+            mingw-w64-x86_64-readline
+          # No PCSC package needed on Windows: cmake/FindPCSC.cmake looks for
+          # winscard.h and links WinSCard, both shipped with mingw-w64.
 
       - name: Show toolchain versions
         run: |
@@ -90,6 +95,15 @@ jobs:
           ninja --version
           qmake6 --version
           command -v windeployqt.exe
+          # Fail fast if the WinSCard headers cmake/FindPCSC.cmake needs are absent.
+          for h in winscard.h; do
+            test -f "$MINGW_PREFIX/include/$h" \
+              && echo "found $h" \
+              || { echo "MISSING: $h"; exit 1; }
+          done
+          test -f "$MINGW_PREFIX/lib/libwinscard.a" \
+            && echo "found libwinscard.a" \
+            || echo "note: libwinscard.a not found, WinSCard may resolve via the import lib"
 
       - name: Configure
         run: |
