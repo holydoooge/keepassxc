@@ -17,9 +17,11 @@
 
 #include "RemoteSettings.h"
 
+#include "core/Config.h"
 #include "core/Database.h"
 #include "core/Metadata.h"
 
+#include <QCryptographicHash>
 #include <QDebug>
 #include <QJsonArray>
 #include <QJsonDocument>
