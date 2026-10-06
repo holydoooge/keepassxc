@@ -1,0 +1,140 @@
+# KeePassXC Windows build workflow for GitHub Actions.
+#
+# Purpose: produce a runnable Windows build from any branch WITHOUT a local
+# C++ toolchain. It uses the MSYS2 environment that is pre-installed on the
+# windows-2022 runner image (C:\msys64) plus mingw-w64 binary packages, so no
+# Qt has to be compiled from source and no vcpkg bootstrap is needed.
+#
+# Place at: .github/workflows/build-keepassxc.yml in your fork.
+#
+# Why not the project's own release-tool.py? Its Windows path shells out to
+# CMake and then requires the WiX Toolset (candle.exe/light.exe/heat.exe) for
+# the MSI, which the runner image does not ship. This workflow drives
+# CMake/Ninja directly instead.
+#
+# Requires windeployqt: KeePassXC's CMakeLists aborts configuration when it
+# cannot find it on Windows. It ships inside mingw-w64-x86_64-qt6-base.
+
+name: Build KeePassXC (Windows)
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - "**"
+    paths:
+      - "src/**"
+      - "cmake/**"
+      - "share/**"
+      - "CMakeLists.txt"
+      - ".github/workflows/build-keepassxc.yml"
+  pull_request:
+    paths:
+      - "src/**"
+      - "CMakeLists.txt"
+      - ".github/workflows/build-keepassxc.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  windows-mingw:
+    name: Windows x64 (MinGW)
+    runs-on: windows-2022
+
+    env:
+      MINGW_PREFIX: /mingw64
+      # Keep the build tree off C:; Windows runners have more room on D:.
+      BUILD_DIR: D:/kpxc-build
+      STAGE_DIR: D:/kpxc-stage
+
+    defaults:
+      run:
+        shell: msys2 {0}
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          # CMake derives the version string from git metadata.
+          fetch-depth: 0
+
+      - name: Set up MSYS2 toolchain
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: false
+          path-type: inherit
+
+      - name: Install build dependencies
+        run: |
+          pacman -Sy --noconfirm --needed \
+            mingw-w64-x86_64-gcc \
+            mingw-w64-x86_64-cmake \
+            mingw-w64-x86_64-ninja \
+            mingw-w64-x86_64-qt6-base \
+            mingw-w64-x86_64-qt6-svg \
+            mingw-w64-x86_64-qt6-tools \
+            mingw-w64-x86_64-qt6-translations \
+            mingw-w64-x86_64-libbotan \
+            mingw-w64-x86_64-zlib \
+            mingw-w64-x86_64-minizip \
+            mingw-w64-x86_64-qrencode \
+            mingw-w64-x86_64-readline \
+            mingw-w64-x86_64-pcsclite
+
+      - name: Show toolchain versions
+        run: |
+          cmake --version | head -n 1
+          gcc --version | head -n 1
+          ninja --version
+          qmake6 --version
+          command -v windeployqt.exe
+
+      - name: Configure
+        run: |
+          cmake -S . -B "$BUILD_DIR" -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_PREFIX_PATH="$MINGW_PREFIX" \
+            -DCMAKE_INSTALL_PREFIX="$STAGE_DIR" \
+            -DKEEPASSXC_BUILD_TYPE=Snapshot \
+            -DOVERRIDE_VERSION="2.9.0-snapshot" \
+            -DWITH_TESTS=ON \
+            -DWITH_GUI_TESTS=OFF \
+            -DKPXC_FEATURE_NETWORK=ON
+
+      - name: Build
+        run: cmake --build "$BUILD_DIR" --parallel
+
+      - name: Run unit tests
+        run: |
+          cd "$BUILD_DIR"
+          ctest -E "gui|cli" --output-on-failure -j 4
+
+      - name: Stage portable application (runs windeployqt)
+        run: |
+          cmake --install "$BUILD_DIR"
+          ls -1 "$STAGE_DIR"
+
+      - name: Package ZIP
+        run: |
+          7z a -tzip "$GITHUB_WORKSPACE/KeePassXC-windows-x64.zip" "$STAGE_DIR"/*
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: KeePassXC-windows-x64
+          path: KeePassXC-windows-x64.zip
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-diagnostics
+          path: |
+            D:/kpxc-build/CMakeCache.txt
+            D:/kpxc-build/CMakeFiles/CMakeConfigureLog.yaml
+            D:/kpxc-build/Testing/Temporary/LastTest.log
+          if-no-files-found: ignore
