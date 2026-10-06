@@ -287,12 +287,26 @@ jobs:
 
       - name: Package ZIP
         run: |
-          # 'cd' first: passing "$STAGE_DIR"/* lets 7z store the 'stage'
-          # directory itself, producing a doubly nested archive.
+          # MSYS2 rewrites bare arguments such as "." into a Windows path, which
+          # makes 7z store the staged directory itself and produces a doubly
+          # nested archive. Excluding conversion keeps the argument literal.
           cd "$STAGE_DIR"
-          7z a -tzip "$GITHUB_WORKSPACE/KeePassXC-windows-x64.zip" .
+          MSYS2_ARG_CONV_EXCL="*" 7z a -tzip "$GITHUB_WORKSPACE/KeePassXC-windows-x64.zip" .
           cd "$GITHUB_WORKSPACE"
-          7z l KeePassXC-windows-x64.zip | head -n 25
+
+          echo "=== archive contents (first entries) ==="
+          7z l KeePassXC-windows-x64.zip | sed -n '15,30p'
+
+          # Assert the layout: a single top-level executable, no wrapping folder.
+          if ! 7z l KeePassXC-windows-x64.zip | grep -qE ' KeePassXC\.exe$'; then
+            echo "::error title=Bad archive layout::KeePassXC.exe is not at the archive root"
+            exit 1
+          fi
+          if 7z l KeePassXC-windows-x64.zip | grep -qE ' [^ ]+\.zip$'; then
+            echo "::error title=Bad archive layout::the archive contains another archive (nested packaging)"
+            exit 1
+          fi
+          echo "archive layout OK"
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
