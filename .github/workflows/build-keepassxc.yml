@@ -142,7 +142,23 @@ jobs:
       - name: Run unit tests
         run: |
           cd "$BUILD_DIR"
-          ctest -E "gui|cli" --output-on-failure -j 4
+          # -j 1 for deterministic, interleaved-free output.
+          ctest -E "gui|cli" --output-on-failure -j 1
+
+      - name: Capture testdatabase output
+        # Runs even when the test step fails, to explain a silent test failure
+        # (no output at all usually means the process could not start).
+        if: always()
+        shell: pwsh
+        run: |
+          $exe = 'D:\kpxc-build\tests\testdatabase.exe'
+          if (-not (Test-Path $exe)) { Write-Host "not built: $exe"; exit 0 }
+          Write-Host "--- running $exe -v2 ---"
+          & $exe -v2 2>&1 | Out-String -Width 200 | Write-Host
+          Write-Host "--- exit code: $LASTEXITCODE ---"
+          Write-Host "--- loaded-module check ---"
+          $out = & cmd /c "`"$exe`" -help 2>&1"
+          Write-Host ($out | Out-String)
 
       - name: Stage portable application (runs windeployqt)
         run: |
@@ -161,13 +177,21 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+      - name: Collect diagnostics
+        if: always()
+        run: |
+          mkdir -p /d/kpxc-diag
+          # Out-of-tree copies so they survive the build dir being large.
+          cp -f "$BUILD_DIR/Testing/Temporary/LastTest.log" /d/kpxc-diag/ 2>/dev/null || true
+          cp -f "$BUILD_DIR/Testing/Temporary/LastTestsFailed.log" /d/kpxc-diag/ 2>/dev/null || true
+          cp -f "$BUILD_DIR/CMakeCache.txt" /d/kpxc-diag/ 2>/dev/null || true
+          cp -f "$BUILD_DIR/tests/testdatabase.exe" /d/kpxc-diag/ 2>/dev/null || true
+          ls -l /d/kpxc-diag
+
       - name: Upload diagnostics on failure
-        if: failure()
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: build-diagnostics
-          path: |
-            D:/kpxc-build/CMakeCache.txt
-            D:/kpxc-build/CMakeFiles/CMakeConfigureLog.yaml
-            D:/kpxc-build/Testing/Temporary/LastTest.log
+          path: D:/kpxc-diag/*
           if-no-files-found: ignore
