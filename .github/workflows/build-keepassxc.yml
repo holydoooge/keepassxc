@@ -223,29 +223,26 @@ jobs:
             echo "=== compiled-in test configuration ==="
             grep -E 'KEEPASSXC_TEST_PYTHON|KEEPASSXC_TEST_WEBDAV_SERVER' config-keepassx-tests.h
             echo
-            echo "=== does the binary exist? ==="
-            ls -l testwebdavclient.exe
+            echo "=== can MSYS2 python actually run? ==="
+            PY=$(sed -n 's/^#define KEEPASSXC_TEST_PYTHON "\(.*\)"/\1/p' config-keepassx-tests.h)
+            "$PY" --version; echo "(python --version exit: $?)"
+            "$PY" -c "print('python executed a script')"; echo "(python -c exit: $?)"
             echo
-            echo "=== can the process even start? ==="
-            ./testwebdavclient.exe -functions
-            echo "(-functions exit: $?)"
+            echo "=== can the server start standalone? ==="
+            "$PY" "$(sed -n 's/^#define KEEPASSXC_TEST_WEBDAV_SERVER "\(.*\)"/\1/p' config-keepassx-tests.h)" "$TEMP/webdav-manual" 0 &
+            SRVPID=$!
+            sleep 2
+            kill $SRVPID 2>/dev/null
+            echo "(server started and was killed)"
             echo
-            echo "=== is a Qt platform plugin reachable? ==="
-            ls -d "$MINGW_PREFIX"/share/qt6/plugins/platforms 2>/dev/null || echo "no plugin dir in prefix"
-            echo "QT_QPA_PLATFORM=${QT_QPA_PLATFORM:-<unset>}"
-            echo
-            echo "=== direct run ==="
+            echo "=== direct run, no redirection games ==="
           } >> "$out" 2>&1
 
-          # A GUI-linked binary needs a platform plugin even for guiless tests;
-          # offscreen removes any dependency on a real display.
-          QT_QPA_PLATFORM=offscreen ./testwebdavclient.exe -v2 >> "$out" 2>&1
+          QT_QPA_PLATFORM=offscreen ./testwebdavclient.exe -v2 > "$out.run" 2>&1
           status=$?
-          {
-            echo
-            echo "exit status: $status"
-            echo "output bytes: $(wc -c < "$out")"
-          } >> "$out" 2>&1
+          echo "test exit status: $status, bytes: $(wc -c < "$out.run")" >> "$out"
+          cat "$out.run" >> "$out" 2>&1
+          rm -f "$out.run"
 
           echo "=== WebDAV test diagnostics ==="
           head -c 5000 "$out"
