@@ -270,48 +270,11 @@ jobs:
       - name: Package ZIP
         shell: pwsh
         run: |
-          # Packaged with Python's zipfile rather than 7z/Compress-Archive:
-          # 7z inside MSYS2 rewrites bare arguments and its listing output starts
-          # with the archive's own name, which made layout assertions unreliable.
-          $stage = 'D:\kpxc-stage'
-          $zipPath = Join-Path $env:GITHUB_WORKSPACE 'KeePassXC-windows-x64.zip'
-          Remove-Item $zipPath -Force -ErrorAction SilentlyContinue
-
-          python -c @"
-import os, sys, zipfile
-from pathlib import Path
-stage = Path(r'$stage')
-out = Path(r'$zipPath')
-files = sorted(p for p in stage.rglob('*') if p.is_file())
-if not files:
-    sys.exit('staging directory is empty')
-if not (stage / 'KeePassXC.exe').is_file():
-    sys.exit('KeePassXC.exe is missing from the staging directory')
-with zipfile.ZipFile(out, 'w', zipfile.ZIP_DEFLATED, compresslevel=6) as z:
-    for p in files:
-        z.write(p, p.relative_to(stage).as_posix())
-print(f'packed {len(files)} files -> {out} ({out.stat().st_size} bytes)')
-"@
+          # The packing script lives in the repository (utils/) so it is testable
+          # on its own; a workflow here-string mangled the YAML once already.
+          python utils\package_windows_artifact.py 'D:\kpxc-stage' "$env:GITHUB_WORKSPACE\KeePassXC-windows-x64.zip"
           if ($LASTEXITCODE -ne 0) { throw "packaging failed" }
-
-          Write-Host "=== archive layout check ==="
-          python -c @"
-import sys, zipfile
-from pathlib import Path
-with zipfile.ZipFile(Path(r'$zipPath')) as z:
-    names = z.namelist()
-roots = {n.split('/')[0] for n in names}
-print('entries:', len(names))
-print('top-level entries:', sorted(roots)[:8])
-if 'KeePassXC.exe' not in names:
-    sys.exit('KeePassXC.exe is not at the archive root')
-if any(n.lower().endswith(('.zip', '.7z')) for n in names):
-    sys.exit('the archive contains another archive')
-nested = [n for n in names if '/' in n and '/' not in n.rstrip('/')]
-print('plugin folders:', len({n.split('/')[0] for n in names if '/' in n}))
-print('layout OK')
-"@
-          if ($LASTEXITCODE -ne 0) { throw "archive layout is wrong" }
+          Get-Item "$env:GITHUB_WORKSPACE\KeePassXC-windows-x64.zip" | Select-Object Name, Length
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
