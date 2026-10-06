@@ -38,17 +38,26 @@ namespace
 TestWebDavClient::TestWebDavClient(QObject* parent)
     : QObject(parent)
 {
+    // Print as we go: when the test binary dies before printing its run summary
+    // (QtTest writes that at the very end), stderr is the only evidence of how
+    // far it got.
+    qInfo("TestWebDavClient: constructing");
 }
 
 TestWebDavClient::~TestWebDavClient() = default;
 
 void TestWebDavClient::initTestCase()
 {
+    qInfo("TestWebDavClient: initTestCase start");
+
     m_tempDir.reset(new QTemporaryDir());
     QVERIFY2(m_tempDir->isValid(), "Unable to create a temporary directory for the WebDAV test root");
 
-    QString python = QStringLiteral(KEEPASSXC_TEST_PYTHON);
-    QString script = QStringLiteral(KEEPASSXC_TEST_WEBDAV_SERVER);
+    const QString python = QStringLiteral(KEEPASSXC_TEST_PYTHON);
+    const QString script = QStringLiteral(KEEPASSXC_TEST_WEBDAV_SERVER);
+
+    qInfo("TestWebDavClient: interpreter=[%s] exists=%d", qPrintable(python), int(QFile::exists(python)));
+    qInfo("TestWebDavClient: server script=[%s] exists=%d", qPrintable(script), int(QFile::exists(script)));
 
     if (python.isEmpty() || !QFile::exists(script)) {
         // qWarning so the reason is visible even without -v2: QSKIP alone exits 0
@@ -69,9 +78,10 @@ void TestWebDavClient::initTestCase()
                      QStringLiteral("--password"),
                      QString::fromLatin1(kPassword)});
 
-    if (!m_server->waitForStarted(kServerStartTimeoutMsec)) {
-        QSKIP("Unable to start the WebDAV test server");
-    }
+    qInfo("TestWebDavClient: server start requested, waiting");
+    QVERIFY2(m_server->waitForStarted(kServerStartTimeoutMsec),
+             qPrintable(QStringLiteral("Unable to start the WebDAV test server: %1").arg(m_server->errorString())));
+    qInfo("TestWebDavClient: server process started");
 
     // Read stdout until the "PORT <n>" banner arrives.
     QByteArray banner;
@@ -89,14 +99,14 @@ void TestWebDavClient::initTestCase()
         }
     }
 
-    if (m_port == 0) {
-        QSKIP("The WebDAV test server did not report a port");
-    }
+    qInfo("TestWebDavClient: banner=[%s] port=%d", banner.constData(), m_port);
+    QVERIFY2(m_port != 0, "The WebDAV test server did not report a port");
 
     m_dbPath = m_tempDir->path() + QStringLiteral("/remote.kdbx");
     m_localPath = m_tempDir->path() + QStringLiteral("/local.kdbx");
 
     QVERIFY2(pingServer(), "The WebDAV test server is not answering");
+    qInfo("TestWebDavClient: initTestCase done, server is answering");
 }
 
 void TestWebDavClient::cleanupTestCase()
