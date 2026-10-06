@@ -139,6 +139,20 @@ jobs:
       - name: Build
         run: cmake --build "$BUILD_DIR" --parallel
 
+      - name: Prepare runtime PATH for test executables
+        # MinGW-built test binaries need the Qt6 and MSYS2 runtime DLLs on the
+        # Windows PATH; without it they die at startup with 0xC0000135
+        # (STATUS_DLL_NOT_FOUND) and print nothing at all.
+        run: |
+          QT_BIN_WIN="$(cygpath -w "$MINGW_PREFIX/bin")"
+          USR_BIN_WIN="$(cygpath -w /usr/bin)"
+          echo "Qt bin: $QT_BIN_WIN"
+          {
+            echo "PATH<<__KPXC_PATH_EOF__"
+            echo "$QT_BIN_WIN;$USR_BIN_WIN;$PATH"
+            echo "__KPXC_PATH_EOF__"
+          } >> "$GITHUB_ENV"
+
       - name: Run unit tests
         run: |
           cd "$BUILD_DIR"
@@ -153,12 +167,11 @@ jobs:
         run: |
           $exe = 'D:\kpxc-build\tests\testdatabase.exe'
           if (-not (Test-Path $exe)) { Write-Host "not built: $exe"; exit 0 }
+          Write-Host "--- Qt on PATH? ---"
+          (Get-Command Qt6Core.dll -ErrorAction SilentlyContinue) | Out-String | Write-Host
           Write-Host "--- running $exe -v2 ---"
           & $exe -v2 2>&1 | Out-String -Width 200 | Write-Host
           Write-Host "--- exit code: $LASTEXITCODE ---"
-          Write-Host "--- loaded-module check ---"
-          $out = & cmd /c "`"$exe`" -help 2>&1"
-          Write-Host ($out | Out-String)
 
       - name: Stage portable application (runs windeployqt)
         run: |
