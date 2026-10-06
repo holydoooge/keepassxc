@@ -209,6 +209,19 @@ jobs:
           echo "startup failures: $failed_probe"
           exit $failed_probe
 
+      - name: Assert the WebDAV test is registered and running
+        # Guards against the test being built but never handed to ctest, which
+        # would let the new transport ship untested without failing the build.
+        if: always()
+        run: |
+          cd "$BUILD_DIR"
+          echo "=== ctest test list (webdav) ==="
+          ctest -N 2>&1 | grep -i webdav || echo "NOT REGISTERED"
+          echo "=== total registered tests ==="
+          ctest -N 2>&1 | grep -c 'Test #' || true
+          echo "=== running the WebDAV test on its own ==="
+          ctest -R testwebdavclient --output-on-failure -V 2>&1 | tail -n 60
+
       - name: Stage portable application (runs windeployqt)
         run: |
           cmake --install "$BUILD_DIR"
