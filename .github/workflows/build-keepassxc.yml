@@ -216,22 +216,35 @@ jobs:
         if: always()
         run: |
           cd "$BUILD_DIR/tests"
-          echo "=== compiled-in test configuration ==="
-          grep -E 'KEEPASSXC_TEST_PYTHON|KEEPASSXC_TEST_WEBDAV_SERVER' config-keepassx-tests.h
+          mkdir -p "$DIAG_DIR"
+          out="$DIAG_DIR/webdav-test.log"
 
-          echo "=== WebDAV test run summary ==="
-          ./testwebdavclient.exe -v2 > /tmp/webdav-test.log 2>&1
+          {
+            echo "=== compiled-in test configuration ==="
+            grep -E 'KEEPASSXC_TEST_PYTHON|KEEPASSXC_TEST_WEBDAV_SERVER' config-keepassx-tests.h
+            echo
+            echo "=== direct run of the test binary ==="
+          } > "$out" 2>&1
+
+          ./testwebdavclient.exe -v2 >> "$out" 2>&1
           status=$?
-          echo "exit status: $status"
-          cat /tmp/webdav-test.log
+          {
+            echo
+            echo "exit status: $status"
+            echo "output bytes: $(wc -c < "$out")"
+          } >> "$out" 2>&1
 
-          if ! grep -q '^Totals:' /tmp/webdav-test.log; then
-            echo "::error title=WebDAV test did not run::no run summary was printed, the test skipped itself"
+          # Print in chunks: a single giant line drowns the interesting part.
+          echo "=== WebDAV test output ==="
+          head -c 6000 "$out"
+
+          if ! grep -q '^Totals:' "$out"; then
+            echo "::error title=WebDAV test did not run::no run summary was printed; full log is in the build-diagnostics artifact"
             exit 1
           fi
-          passed=$(sed -n 's/^Totals: \([0-9]*\) passed.*/\1/p' /tmp/webdav-test.log)
-          failed=$(sed -n 's/.*, \([0-9]*\) failed.*/\1/p' /tmp/webdav-test.log)
-          skipped=$(sed -n 's/.*, \([0-9]*\) skipped.*/\1/p' /tmp/webdav-test.log)
+          passed=$(sed -n 's/^Totals: \([0-9]*\) passed.*/\1/p' "$out")
+          failed=$(sed -n 's/.*, \([0-9]*\) failed.*/\1/p' "$out")
+          skipped=$(sed -n 's/.*, \([0-9]*\) skipped.*/\1/p' "$out")
           echo "passed=$passed failed=$failed skipped=$skipped"
 
           if [ "$status" -ne 0 ] || [ "${failed:-1}" -ne 0 ] || [ "${skipped:-1}" -ne 0 ] || [ "${passed:-0}" -lt 6 ]; then
