@@ -215,6 +215,11 @@ jobs:
         # passing one. Assert on the run summary instead of the exit code.
         if: always()
         run: |
+          # The test is expected to fail while this is being diagnosed, and the
+          # diagnostic output matters most in exactly that case. Without this the
+          # shell aborts on the failing command and swallows the evidence.
+          set +e
+
           cd "$BUILD_DIR/tests"
           mkdir -p "$DIAG_DIR"
           out="$DIAG_DIR/webdav-test.log"
@@ -223,35 +228,30 @@ jobs:
             echo "=== compiled-in test configuration ==="
             grep -E 'KEEPASSXC_TEST_PYTHON|KEEPASSXC_TEST_WEBDAV_SERVER' config-keepassx-tests.h
             echo
-            echo "=== binary sizes: ours vs a known-good test ==="
-            ls -l testwebdavclient.exe testdatabase.exe testmerge.exe 2>&1
+            echo "=== binary size vs a known-good test ==="
+            ls -l testwebdavclient.exe testdatabase.exe 2>&1
             echo
-            echo "=== linked libraries (imports) ==="
-            objdump -p testwebdavclient.exe 2>/dev/null | grep 'DLL Name' || echo "objdump unavailable"
-            echo
-            echo "=== python and server sanity ==="
-            PY=$(sed -n 's/^#define KEEPASSXC_TEST_PYTHON "\(.*\)"/\1/p' config-keepassx-tests.h)
-            "$PY" --version
-            "$PY" "$(sed -n 's/^#define KEEPASSXC_TEST_WEBDAV_SERVER "\(.*\)"/\1/p' config-keepassx-tests.h)" "$TEMP/webdav-manual" 0 &
-            SRVPID=$!
-            sleep 2
-            kill $SRVPID 2>/dev/null
-            echo "(standalone server start attempted)"
-            echo
-            echo "=== direct run: stdout+stderr captured separately ==="
+            echo "=== direct run: stdout and stderr captured separately ==="
           } >> "$out" 2>&1
 
           ./testwebdavclient.exe -v2 > "$out.stdout" 2> "$out.stderr"
           status=$?
+
           {
             echo "exit status: $status"
-            echo "stdout bytes: $(wc -c < "$out.stdout")"
-            echo "stderr bytes: $(wc -c < "$out.stderr")"
+            echo "stdout bytes: $(wc -c < "$out.stdout" 2>/dev/null || echo missing)"
+            echo "stderr bytes: $(wc -c < "$out.stderr" 2>/dev/null || echo missing)"
             echo "--- stdout ---"
-            cat "$out.stdout"
+            cat "$out.stdout" 2>/dev/null
             echo "--- stderr ---"
-            cat "$out.stderr"
+            cat "$out.stderr" 2>/dev/null
           } >> "$out" 2>&1
+
+          cp -f "$out.stdout" "$DIAG_DIR/webdav-test.stdout" 2>/dev/null
+          cp -f "$out.stderr" "$DIAG_DIR/webdav-test.stderr" 2>/dev/null
+
+          echo "=== WebDAV test diagnostics ==="
+          head -c 6000 "$out"
 
           echo "=== WebDAV test diagnostics ==="
           head -c 5000 "$out"
