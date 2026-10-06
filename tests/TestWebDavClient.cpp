@@ -51,6 +51,9 @@ void TestWebDavClient::initTestCase()
     QString script = QStringLiteral(KEEPASSXC_TEST_WEBDAV_SERVER);
 
     if (python.isEmpty() || !QFile::exists(script)) {
+        // qWarning so the reason is visible even without -v2: QSKIP alone exits 0
+        // and would otherwise look exactly like a passing test.
+        qWarning("WebDAV tests skipped: interpreter=[%s] server=[%s]", qPrintable(python), qPrintable(script));
         QSKIP("No Python interpreter or no webdav_test_server.py configured; skipping WebDAV tests");
     }
 

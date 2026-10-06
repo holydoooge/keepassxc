@@ -23,10 +23,15 @@ include_directories(
 add_definitions(-DQT_TEST_LIB -DQT_NO_USE_NODISCARD_FILE_OPEN)
 
 set(KEEPASSX_TEST_DATA_DIR ${CMAKE_CURRENT_SOURCE_DIR}/data)
-configure_file(config-keepassx-tests.h.in ${CMAKE_CURRENT_BINARY_DIR}/config-keepassx-tests.h)
 
 # WebDAV tests talk to a stdlib-only Python server shipped next to the test, so
 # no external service or network access is needed.
+#
+# This must run BEFORE the config header is generated below: the interpreter and
+# server paths are baked into that header, and generating it first would leave
+# both macros empty, which made the test skip itself silently while still
+# reporting as passed.
+set(KEEPASSXC_TEST_PYTHON "")
 set(KEEPASSXC_TEST_WEBDAV_SERVER "")
 find_package(Python3 COMPONENTS Interpreter QUIET)
 if(Python3_Interpreter_FOUND)
@@ -36,9 +41,10 @@ if(Python3_Interpreter_FOUND)
             ${KEEPASSXC_TEST_WEBDAV_SERVER} COPYONLY)
     message(STATUS "WebDAV tests will use Python: ${Python3_EXECUTABLE}")
 else()
-    set(KEEPASSXC_TEST_PYTHON "")
     message(STATUS "Python not found: WebDAV tests will be skipped")
 endif()
+
+configure_file(config-keepassx-tests.h.in ${CMAKE_CURRENT_BINARY_DIR}/config-keepassx-tests.h)
 
 function(add_unit_test)
     cmake_parse_arguments(TEST "" "NAME" "SOURCES;LIBS;LAUNCHER" ${ARGN})

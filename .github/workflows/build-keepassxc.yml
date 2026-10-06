@@ -209,53 +209,36 @@ jobs:
           echo "startup failures: $failed_probe"
           exit $failed_probe
 
-      - name: Assert the WebDAV test is registered and running
-        # Guards against the test being built but never handed to ctest, and
-        # against it quietly skipping itself (a 0.02s "pass" is a QSKIP, not a
-        # run). Both would let the new transport ship untested.
+      - name: Assert the WebDAV test really ran
+        # Guards against the failure mode that hid a broken test before: a QSKIP
+        # in initTestCase exits 0, so a completely skipped test looks like a
+        # passing one. Assert on the run summary instead of the exit code.
         if: always()
         run: |
-          cd "$BUILD_DIR"
-          echo "=== ctest knows the test? ==="
-          ctest -N 2>&1 | grep -i webdav
+          cd "$BUILD_DIR/tests"
+          echo "=== compiled-in test configuration ==="
+          grep -E 'KEEPASSXC_TEST_PYTHON|KEEPASSXC_TEST_WEBDAV_SERVER' config-keepassx-tests.h
 
-          echo "=== running the WebDAV test on its own, printing every result ==="
-          ctest -R testwebdavclient --output-on-failure -V 2>&1 | tail -n 80
-
-          echo "=== asserting the assertions actually ran ==="
-          echo "--- compiled-in config values ---"
-          grep -E 'KEEPASSXC_TEST_PYTHON|KEEPASSXC_TEST_WEBDAV_SERVER' tests/config-keepassx-tests.h || true
-          echo "--- does the interpreter exist and run? ---"
-          PY=$(sed -n 's/^#define KEEPASSXC_TEST_PYTHON "\(.*\)"/\1/p' tests/config-keepassx-tests.h)
-          echo "python: [$PY]"
-          if [ -n "$PY" ] && [ -x "$PY" ]; then "$PY" --version 2>&1; else echo "python NOT executable"; fi
-          echo "--- does the server script exist? ---"
-          SRV=$(sed -n 's/^#define KEEPASSXC_TEST_WEBDAV_SERVER "\(.*\)"/\1/p' tests/config-keepassx-tests.h)
-          echo "server: [$SRV]"
-          [ -f "$SRV" ] && echo "server file OK" || echo "server file MISSING"
-          echo "--- can the server be started by hand? ---"
-          if [ -n "$PY" ] && [ -f "$SRV" ]; then
-            "$PY" "$SRV" /tmp/webdav-manual 0 > /tmp/manual-server.log 2>&1 &
-            sleep 2
-            echo "manual server log: $(cat /tmp/manual-server.log)"
-            kill %1 2>/dev/null || true
-          fi
-
-          echo "--- running the test, output forced to a file ---"
-          # -v2 is required: QSKIP and qWarning output is otherwise suppressed,
-          # which makes a skipped test indistinguishable from a passing one.
-          ./tests/testwebdavclient.exe -v2 > /tmp/webdav-test.log 2>&1
+          echo "=== WebDAV test run summary ==="
+          ./testwebdavclient.exe -v2 > /tmp/webdav-test.log 2>&1
           status=$?
           echo "exit status: $status"
-          echo "--- captured output (bytes: $(wc -c < /tmp/webdav-test.log)) ---"
           cat /tmp/webdav-test.log
 
-          if [ "$status" -eq 0 ]; then
-            echo "WebDAV test completed (a skip would still exit 0, see the output above)"
-          else
-            echo "::error title=WebDAV test failed::the built-in WebDAV transport is broken"
+          if ! grep -q '^Totals:' /tmp/webdav-test.log; then
+            echo "::error title=WebDAV test did not run::no run summary was printed, the test skipped itself"
             exit 1
           fi
+          passed=$(sed -n 's/^Totals: \([0-9]*\) passed.*/\1/p' /tmp/webdav-test.log)
+          failed=$(sed -n 's/.*, \([0-9]*\) failed.*/\1/p' /tmp/webdav-test.log)
+          skipped=$(sed -n 's/.*, \([0-9]*\) skipped.*/\1/p' /tmp/webdav-test.log)
+          echo "passed=$passed failed=$failed skipped=$skipped"
+
+          if [ "$status" -ne 0 ] || [ "${failed:-1}" -ne 0 ] || [ "${skipped:-1}" -ne 0 ] || [ "${passed:-0}" -lt 6 ]; then
+            echo "::error title=WebDAV transport untested::expected 6 passing assertions and no skips"
+            exit 1
+          fi
+          echo "WebDAV transport verified: $passed assertions passed, none skipped"
 
       - name: Stage portable application (runs windeployqt)
         run: |
