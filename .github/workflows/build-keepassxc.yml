@@ -223,14 +223,32 @@ jobs:
           ctest -R testwebdavclient --output-on-failure -V 2>&1 | tail -n 80
 
           echo "=== asserting the assertions actually ran ==="
+          echo "--- compiled-in config values ---"
+          grep -E 'KEEPASSXC_TEST_PYTHON|KEEPASSXC_TEST_WEBDAV_SERVER' tests/config-keepassx-tests.h || true
+          echo "--- does the interpreter exist and run? ---"
+          PY=$(sed -n 's/^#define KEEPASSXC_TEST_PYTHON "\(.*\)"/\1/p' tests/config-keepassx-tests.h)
+          echo "python: [$PY]"
+          if [ -n "$PY" ] && [ -x "$PY" ]; then "$PY" --version 2>&1; else echo "python NOT executable"; fi
+          echo "--- does the server script exist? ---"
+          SRV=$(sed -n 's/^#define KEEPASSXC_TEST_WEBDAV_SERVER "\(.*\)"/\1/p' tests/config-keepassx-tests.h)
+          echo "server: [$SRV]"
+          [ -f "$SRV" ] && echo "server file OK" || echo "server file MISSING"
+          echo "--- can the server be started by hand? ---"
+          if [ -n "$PY" ] && [ -f "$SRV" ]; then
+            "$PY" "$SRV" /tmp/webdav-manual 0 > /tmp/manual-server.log 2>&1 &
+            sleep 2
+            echo "manual server log: $(cat /tmp/manual-server.log)"
+            kill %1 2>/dev/null || true
+          fi
+
+          echo "--- running the test, output forced to a file ---"
           # -v2 is required: QSKIP and qWarning output is otherwise suppressed,
           # which makes a skipped test indistinguishable from a passing one.
-          ./tests/testwebdavclient.exe -v2 2>&1 | tail -n 60
-          status=${PIPESTATUS[0]}
-          echo "testwebdavclient exit status: $status"
-
-          echo "=== did the test server file get deployed next to the test? ==="
-          ls -l tests/webdav_test_server.py 2>&1 || echo "MISSING"
+          ./tests/testwebdavclient.exe -v2 > /tmp/webdav-test.log 2>&1
+          status=$?
+          echo "exit status: $status"
+          echo "--- captured output (bytes: $(wc -c < /tmp/webdav-test.log)) ---"
+          cat /tmp/webdav-test.log
 
           if [ "$status" -eq 0 ]; then
             echo "WebDAV test completed (a skip would still exit 0, see the output above)"
