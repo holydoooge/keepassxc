@@ -38,6 +38,8 @@ public:
 signals:
     void newDatabase();
     void openDatabase();
+    /** Open a database stored on a WebDAV server. */
+    void openFromWebDav();
     void openDatabaseFile(QString);
     void importFile();
 

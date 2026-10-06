@@ -50,6 +50,8 @@
 #include "gui/entry/EntryView.h"
 #include "gui/osutils/OSUtils.h"
 #include "gui/remote/RemoteSettings.h"
+#include "gui/remote/OpenFromWebDavDialog.h"
+#include "gui/remote/RemoteDatabaseSession.h"
 #include "keeshare/KeeShare.h"
 #include "keeshare/SettingsPageKeeShare.h"
 #include "keys/drivers/YubiKey.h"
@@ -530,6 +532,7 @@ MainWindow::MainWindow()
 
     connect(m_ui->welcomeWidget, SIGNAL(newDatabase()), SLOT(switchToNewDatabase()));
     connect(m_ui->welcomeWidget, SIGNAL(openDatabase()), SLOT(switchToOpenDatabase()));
+    connect(m_ui->welcomeWidget, SIGNAL(openFromWebDav()), SLOT(switchToOpenFromWebDav()));
     connect(m_ui->welcomeWidget, SIGNAL(openDatabaseFile(QString)), SLOT(switchToDatabaseFile(QString)));
     connect(m_ui->welcomeWidget, SIGNAL(importFile()), m_ui->tabWidget, SLOT(importFile()));
 
@@ -1212,6 +1215,33 @@ void MainWindow::switchToDatabaseFile(const QString& file)
 {
     m_ui->tabWidget->addDatabaseTab(file);
     switchToDatabases();
+}
+
+void MainWindow::switchToOpenFromWebDav()
+{
+#ifdef KPXC_FEATURE_NETWORK
+    OpenFromWebDavDialog dialog(this);
+    if (dialog.exec() != QDialog::Accepted) {
+        return;
+    }
+
+    const auto filePath = dialog.localFilePath();
+    if (filePath.isEmpty()) {
+        return;
+    }
+
+    // Register before opening: the save path looks the session up by file path,
+    // so it must already be there when the user saves.
+    RemoteDatabaseSessions::add(filePath, dialog.takeSession());
+
+    m_ui->tabWidget->addDatabaseTab(filePath);
+    switchToDatabases();
+#else
+    MessageBox::information(this,
+                            tr("WebDAV Not Available"),
+                            tr("This build of KeePassXC was compiled without networking support."),
+                            MessageBox::Ok);
+#endif
 }
 
 void MainWindow::updateRemoteSyncMenuEntries()

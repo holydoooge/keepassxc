@@ -85,6 +85,9 @@ public:
         LastDir,
         /** WebDAV secrets, kept local so a shared database cannot leak them. */
         RemoteWebDavCredentials,
+        /** Last WebDAV server used by "Open from WebDAV", for pre-filling. */
+        RemoteWebDavLastUrl,
+        RemoteWebDavLastUser,
 
         GUI_Language,
         GUI_HideMenubar,

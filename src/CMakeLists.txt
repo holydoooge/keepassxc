@@ -186,7 +186,6 @@ set(gui_SOURCES
         gui/remote/RemoteHandler.cpp
         gui/remote/RemoteProcess.cpp
         gui/remote/RemoteSettings.cpp
-        gui/remote/RemoteWebDavDialog.cpp
         gui/reports/ReportsWidget.cpp
         gui/reports/ReportsDialog.cpp
         gui/reports/ReportsWidgetHealthcheck.cpp
@@ -316,6 +315,9 @@ if(KPXC_FEATURE_NETWORK)
             networking/NetworkManager.cpp
             networking/UpdateChecker.cpp
             networking/WebDavClient.cpp
+            gui/remote/RemoteWebDavDialog.cpp
+            gui/remote/RemoteDatabaseSession.cpp
+            gui/remote/OpenFromWebDavDialog.cpp
             gui/UpdateCheckDialog.cpp
             gui/IconDownloader.cpp
             gui/IconDownloaderDialog.cpp)

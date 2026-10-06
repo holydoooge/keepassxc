@@ -59,6 +59,7 @@
 #include "keeshare/KeeShare.h"
 #include "remote/RemoteHandler.h"
 #include "remote/RemoteSettings.h"
+#include "remote/RemoteDatabaseSession.h"
 
 #ifdef KPXC_FEATURE_NETWORK
 #include "gui/IconDownloaderDialog.h"
@@ -2527,6 +2528,7 @@ bool DatabaseWidget::save()
         m_blockAutoSave = false;
         m_autosaveTimer->stop(); // stop autosave delay to avoid triggering another save
         hideMessage();
+        uploadToRemoteIfWebDav();
         return true;
     }
 
@@ -2551,6 +2553,39 @@ bool DatabaseWidget::save()
                 MessageWidget::LongAutoHideTimeout);
 
     return false;
+}
+
+/**
+ * Push a WebDAV-backed database back to its server after a local save.
+ *
+ * The database itself was opened from a local mirror, so this runs on the normal
+ * save path and everything else in the widget stays unaware of the remote. The
+ * upload is conditional on the ETag read when the database was downloaded: if
+ * another device wrote it in the meantime the server refuses with 412 and the
+ * user is told, rather than that revision being silently replaced.
+ */
+void DatabaseWidget::uploadToRemoteIfWebDav()
+{
+#ifdef KPXC_FEATURE_NETWORK
+    auto* session = RemoteDatabaseSessions::find(m_db->filePath());
+    if (!session) {
+        return;
+    }
+
+    showMessage(tr("Uploading to %1…").arg(session->displayUrl()), MessageWidget::Information, false);
+    if (session->upload(this)) {
+        showMessage(tr("Uploaded to %1.").arg(session->displayUrl()),
+                    MessageWidget::Positive,
+                    false,
+                    MessageWidget::LongAutoHideTimeout);
+    } else {
+        showMessage(tr("Saved locally, but the upload to %1 failed. See the dialog for details.")
+                        .arg(session->displayUrl()),
+                    MessageWidget::Error,
+                    true,
+                    MessageWidget::LongAutoHideTimeout);
+    }
+#endif
 }
 
 /**

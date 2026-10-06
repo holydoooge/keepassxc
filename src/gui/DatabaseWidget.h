@@ -181,6 +181,8 @@ public slots:
     bool save();
     bool saveAs();
     bool saveBackup();
+    /** Uploads the database back to its WebDAV server, if it came from one. */
+    void uploadToRemoteIfWebDav();
 
     void replaceDatabase(QSharedPointer<Database> db);
     void createEntry();

@@ -23,7 +23,9 @@
 
 #include "RemoteHandler.h"
 #include "RemoteSettings.h"
+#ifdef KPXC_FEATURE_NETWORK
 #include "RemoteWebDavDialog.h"
+#endif
 #include "gui/MessageBox.h"
 
 #include <QFile>
@@ -210,6 +212,7 @@ void DatabaseSettingsWidgetRemote::editCurrentSettings()
 
 void DatabaseSettingsWidgetRemote::configureWebDav()
 {
+#ifdef KPXC_FEATURE_NETWORK
     RemoteWebDavDialog dialog(this);
     dialog.setUrl(m_webDavUrl);
     dialog.setUsername(m_webDavUsername);
@@ -253,6 +256,10 @@ void DatabaseSettingsWidgetRemote::configureWebDav()
     m_ui->downloadTimeoutSec->setValue(dialog.timeoutSec());
     updateWebDavSummary();
     m_modified = true;
+#else
+    m_ui->messageWidget->showMessage(tr("This build of KeePassXC was compiled without networking support."),
+                                     MessageWidget::Warning);
+#endif
 }
 
 void DatabaseSettingsWidgetRemote::updateWebDavSummary()

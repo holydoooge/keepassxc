@@ -127,6 +127,8 @@ private slots:
     void togglePasswordGenerator(bool enabled);
     void switchToNewDatabase();
     void switchToOpenDatabase();
+    /** Prompts for a WebDAV URL, downloads the database and opens it. */
+    void switchToOpenFromWebDav();
     void switchToDatabaseFile(const QString& file);
     void updateRemoteSyncMenuEntries();
     void databaseStatusChanged(DatabaseWidget* dbWidget);

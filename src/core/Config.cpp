@@ -105,6 +105,9 @@ static const QHash<Config::ConfigKey, ConfigDirective> configStrings = {
     // Local, not Roaming: WebDAV passwords must not travel with a shared config,
     // and the database they belong to is not shared either.
     {Config::RemoteWebDavCredentials, {QS("RemoteWebDavCredentials"), Local, {}}},
+    // Not secret, so Roaming is fine; the password is never stored at all.
+    {Config::RemoteWebDavLastUrl, {QS("RemoteWebDavLastUrl"), Roaming, {}}},
+    {Config::RemoteWebDavLastUser, {QS("RemoteWebDavLastUser"), Roaming, {}}},
 
     // GUI
     {Config::GUI_Language, {QS("GUI/Language"), Roaming, QS("system")}},

@@ -136,6 +136,16 @@
       </widget>
      </item>
      <item>
+      <widget class="QPushButton" name="buttonOpenFromWebDav">
+       <property name="text">
+        <string>Open from WebDAV</string>
+       </property>
+       <property name="toolTip">
+        <string>Open a database that is stored on a WebDAV server (Nextcloud, ownCloud, …). Every save is uploaded back to the server.</string>
+       </property>
+      </widget>
+     </item>
+     <item>
       <widget class="QPushButton" name="buttonImport">
        <property name="text">
         <string>Import File</string>
