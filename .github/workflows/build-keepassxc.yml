@@ -210,17 +210,29 @@ jobs:
           exit $failed_probe
 
       - name: Assert the WebDAV test is registered and running
-        # Guards against the test being built but never handed to ctest, which
-        # would let the new transport ship untested without failing the build.
+        # Guards against the test being built but never handed to ctest, and
+        # against it quietly skipping itself (a 0.02s "pass" is a QSKIP, not a
+        # run). Both would let the new transport ship untested.
         if: always()
         run: |
           cd "$BUILD_DIR"
-          echo "=== ctest test list (webdav) ==="
-          ctest -N 2>&1 | grep -i webdav || echo "NOT REGISTERED"
-          echo "=== total registered tests ==="
-          ctest -N 2>&1 | grep -c 'Test #' || true
-          echo "=== running the WebDAV test on its own ==="
-          ctest -R testwebdavclient --output-on-failure -V 2>&1 | tail -n 60
+          echo "=== ctest knows the test? ==="
+          ctest -N 2>&1 | grep -i webdav
+
+          echo "=== running the WebDAV test on its own, printing every result ==="
+          ctest -R testwebdavclient --output-on-failure -V 2>&1 | tail -n 80
+
+          echo "=== asserting the assertions actually ran ==="
+          ./tests/testwebdavclient.exe -o -,txt 2>&1 | tail -n 40
+          status=${PIPESTATUS[0]}
+          echo "testwebdavclient exit status: $status"
+
+          if [ "$status" -eq 0 ]; then
+            echo "WebDAV test completed (a skip would still exit 0, see the output above)"
+          else
+            echo "::error title=WebDAV test failed::the built-in WebDAV transport is broken"
+            exit 1
+          fi
 
       - name: Stage portable application (runs windeployqt)
         run: |
