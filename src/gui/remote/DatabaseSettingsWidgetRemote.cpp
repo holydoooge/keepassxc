@@ -108,13 +108,28 @@ bool DatabaseSettingsWidgetRemote::saveSettings()
 void DatabaseSettingsWidgetRemote::saveCurrentSettings()
 {
     QString name = m_ui->nameLineEdit->text();
+
+    // Picking WebDAV and pressing Save without naming the remote is the obvious
+    // first thing a user tries; give it a name instead of doing nothing.
+    if (name.isEmpty() && m_webDavMode) {
+        name = QStringLiteral("WebDAV");
+        m_ui->nameLineEdit->setText(name);
+    }
+
     if (name.isEmpty()) {
         m_ui->messageWidget->showMessage(tr("Name cannot be empty."), MessageWidget::Warning);
         return;
     }
 
+    if (m_webDavMode && m_webDavUrl.isEmpty()) {
+        m_ui->messageWidget->showMessage(
+            tr("Configure the WebDAV server first: press “Configure WebDAV…” and enter the database URL."),
+            MessageWidget::Warning);
+        return;
+    }
+
     auto* params = new RemoteParams();
-    params->name = m_ui->nameLineEdit->text();
+    params->name = name;
     params->transport = m_webDavMode ? RemoteParams::Transport::WebDav : RemoteParams::Transport::Command;
     params->downloadCommand = m_ui->downloadCommand->text();
     params->downloadInput = m_ui->inputForDownload->toPlainText();
@@ -243,7 +258,10 @@ void DatabaseSettingsWidgetRemote::configureWebDav()
 void DatabaseSettingsWidgetRemote::updateWebDavSummary()
 {
     if (m_webDavUrl.isEmpty()) {
-        m_ui->webDavSummaryLabel->setText(tr("No WebDAV server configured yet."));
+        m_ui->webDavSummaryLabel->setText(
+            m_webDavMode
+                ? tr("No WebDAV server configured yet — press “Configure WebDAV…”, then Save.")
+                : tr("Select “WebDAV (built-in client)” and press “Configure WebDAV…” to set up a server."));
     } else {
         auto summary = tr("WebDAV: %1 (user %2)").arg(m_webDavUrl, m_webDavUsername.isEmpty()
                                                                       ? tr("none")
@@ -256,7 +274,11 @@ void DatabaseSettingsWidgetRemote::updateWebDavSummary()
 
     // The command fields are meaningless in WebDAV mode.
     m_ui->commandTabWidget->setEnabled(!m_webDavMode);
-    m_ui->webDavConfigureButton->setEnabled(m_webDavMode);
+    // Deliberately always enabled: this button is how a NEW remote is switched
+    // to WebDAV, so disabling it outside WebDAV mode made the feature
+    // unreachable (the mode could only be changed by the combo box, which had no
+    // visible effect on the fields it enables).
+    m_ui->webDavConfigureButton->setEnabled(true);
 }
 
 void DatabaseSettingsWidgetRemote::updateSettingsList()
